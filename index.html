@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ALPACCO TEAM SYNC FINAL — 2026-07-21 -->
+<!-- ALPACCO TEAM SYNC PERMISSION FIX — 2026-07-21 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -3618,6 +3618,13 @@ function showTab(id,btn){
   const target=document.getElementById(id);
   if(target)target.classList.add("active");
 
+  /* Enforce the real section state inline. Older theme rules use
+     display: block !important and must never override permissions. */
+  document.querySelectorAll(".section").forEach(s=>{
+    const visible=!!currentSession&&userCanAccess(s.id)&&s===target;
+    s.style.setProperty("display",visible?"block":"none","important");
+  });
+
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
   if(btn)btn.classList.add("active");
 
@@ -5152,6 +5159,8 @@ function applyRoleView(redirect=true){
     const allowed=userCanAccess(sec.id);
     sec.classList.toggle("staff-blocked-section",!allowed);
     if(!allowed)sec.classList.remove("active");
+    const visible=allowed&&sec.classList.contains("active");
+    sec.style.setProperty("display",visible?"block":"none","important");
   });
 
   const active=[...document.querySelectorAll(".section.active")][0]?.id;
@@ -5159,7 +5168,13 @@ function applyRoleView(redirect=true){
     const first=firstAllowedSection();
     document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
     const target=document.getElementById(first);
-    if(target)target.classList.add("active");
+    if(target){
+      target.classList.add("active");
+      target.style.setProperty("display","block","important");
+    }
+    document.querySelectorAll(".section").forEach(s=>{
+      if(s!==target)s.style.setProperty("display","none","important");
+    });
     document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
     const tab=findTabButton(first);
     if(tab)tab.classList.add("active");

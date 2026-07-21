@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- ALPACCO LOCAL LOGIN FINAL — 2026-07-21 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -2440,7 +2441,7 @@ header{
       <div class="login-logo">🍦</div>
       <div>
         <h2>Alpacco Inventory Login — V10</h2>
-        <p>Login with your assigned username and 4-digit PIN. Supabase securely verifies your account.</p>
+        <p>Login with a username and 4-digit PIN managed in this browser.</p>
       </div>
     </div>
 
@@ -2460,7 +2461,7 @@ header{
     </div>
 
     <div class="login-note">
-      Use the username and 4-digit PIN assigned by your boss. Five failed attempts temporarily lock login on this device. The PIN is never stored in this HTML file.
+      Accounts are managed in Settings and saved in this browser. Five failed attempts temporarily lock login on this device. This local login is a convenience control, not a server security boundary.
     </div>
   </div>
 </div>
@@ -3081,7 +3082,7 @@ header{
               <input id="settingStaffPin" type="password" readonly title="Change password in User Access Settings below.">
             </div>
           </div>
-          <div class="small">These backup PIN fields are locked. Change PINs in User Access Settings below.</div>
+          <div class="small">PINs are managed in User Access Settings below. Saved PINs are hashed in this browser.</div>
         </div>
 
         <div class="settings-panel user-access-panel">
@@ -3263,7 +3264,7 @@ const SUPABASE_URL = "https://bmxrfyroannqryxiepmi.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_Ia9eJXKFq0pGwVbCZw1M7A_hGiM0NCe";
 const CLOUD_STATE_ID = "alpacco-main";
 const CLOUD_TABLE = "app_state";
-const SUPABASE_AUTH_REQUIRED = true;
+const SUPABASE_AUTH_REQUIRED = false;
 const supabaseClient = (window.supabase && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
   : null;
@@ -3288,8 +3289,8 @@ function normalizeDb(d){
   d.stockCounts=d.stockCounts||[];
   d.activityLogs=d.activityLogs||[];
   d.settings=d.settings||{};
-  d.settings.bossPin="__SUPABASE_AUTH__";
-  d.settings.staffPin="__SUPABASE_AUTH__";
+  d.settings.bossPin=SUPABASE_AUTH_REQUIRED?"__SUPABASE_AUTH__":String(d.settings.bossPin||"8888");
+  d.settings.staffPin=SUPABASE_AUTH_REQUIRED?"__SUPABASE_AUTH__":String(d.settings.staffPin||"1234");
   d.settings.users=d.settings.users||[];
   d.settings.users.forEach(u=>{
     u.id=u.id||uid("USR");
@@ -3308,6 +3309,22 @@ function normalizeDb(d){
     u.status=u.status||"ACTIVE";
     u.permissions=Array.isArray(u.permissions)?u.permissions:(u.role==="boss"?["dashboard"]:["dashboard","stockin","stockout","stockcount"]);
   });
+  if(!SUPABASE_AUTH_REQUIRED){
+    [
+      {username:"boss",password:"8888",displayName:"Super Boss",role:"boss",permissions:["ALL"]},
+      {username:"staff",password:"1234",displayName:"Staff",role:"staff",permissions:["dashboard","stockin","stockout","stockcount"]}
+    ].forEach(function(seed){
+      var account=d.settings.users.find(function(item){return String(item.username||"").toLowerCase()===seed.username;});
+      if(!account){
+        account={id:uid("USR"),username:seed.username,password:seed.password,displayName:seed.displayName,role:seed.role,status:"ACTIVE",permissions:seed.permissions.slice(),authVersion:0,pinFormat:"PIN4",weakPassword:false};
+        d.settings.users.push(account);
+      }else if(!account.passwordHash&&!String(account.password||"")){
+        account.password=seed.password;
+        account.pinFormat="PIN4";
+        account.weakPassword=false;
+      }
+    });
+  }
   d.settings.stockCountReminderTime=d.settings.stockCountReminderTime||"17:00";
   d.settings.timeZone=d.settings.timeZone||"Asia/Kuala_Lumpur";
   d.settings.timeZoneLabel=d.settings.timeZoneLabel||"Malaysia Time";
@@ -5389,8 +5406,8 @@ setInterval(()=>showStockCountReminder(false),60000);
 
 function renderSettings(){
   if(!document.getElementById("settingBossPin"))return;
-  document.getElementById("settingBossPin").value="SUPABASE AUTH";
-  document.getElementById("settingStaffPin").value="SUPABASE AUTH";
+  document.getElementById("settingBossPin").value=SUPABASE_AUTH_REQUIRED?"SUPABASE AUTH":"EDIT BELOW";
+  document.getElementById("settingStaffPin").value=SUPABASE_AUTH_REQUIRED?"SUPABASE AUTH":"EDIT BELOW";
   document.getElementById("settingReminderTime").value=db.settings.stockCountReminderTime||"17:00";
   if(document.getElementById("settingTimeZone"))document.getElementById("settingTimeZone").value=db.settings.timeZone||"Asia/Kuala_Lumpur";
   if(document.getElementById("settingTimeZoneLabel"))document.getElementById("settingTimeZoneLabel").value=db.settings.timeZoneLabel||"Malaysia Time";
@@ -5453,8 +5470,10 @@ function clearSelectedCountItems(){
 
 function saveSystemSettings(){
   if(!currentSession || currentSession.role!=="boss")return alert("Boss login required.");
-  db.settings.bossPin="__SUPABASE_AUTH__";
-  db.settings.staffPin="__SUPABASE_AUTH__";
+  if(SUPABASE_AUTH_REQUIRED){
+    db.settings.bossPin="__SUPABASE_AUTH__";
+    db.settings.staffPin="__SUPABASE_AUTH__";
+  }
   db.settings.stockCountReminderTime=selected("settingReminderTime")||"17:00";
   db.settings.timeZone=selected("settingTimeZone")||"Asia/Kuala_Lumpur";
   db.settings.timeZoneLabel=selected("settingTimeZoneLabel").trim()||"Malaysia Time";
@@ -5523,9 +5542,9 @@ function saveDb(){
     var serialised=JSON.stringify(db);
     localStorage.setItem(STORAGE_KEY,serialised);
     RT_LAST_SAVED_SNAPSHOT=serialised;
-    RT_CLOUD_DIRTY=true;
+    RT_CLOUD_DIRTY=SUPABASE_AUTH_REQUIRED;
     rtClearSaveError();
-    scheduleCloudSave();
+    if(SUPABASE_AUTH_REQUIRED)scheduleCloudSave();
     return true;
   }catch(e){
     console.error("Persistent save failed:",e);
@@ -5622,7 +5641,7 @@ async function rtSetPassword(account,password){
   account.passwordIterations=180000;
   account.password="";
   account.pinFormat=rtPasswordStrong(password)?"PIN4":"LEGACY";
-  account.weakPassword=!rtPasswordStrong(password)||rtKnownDefaultPin(password);
+  account.weakPassword=!rtPasswordStrong(password);
   account.authVersion=Number(account.authVersion||0)+1;
   if(String(account.username||"").toLowerCase()==="boss")db.settings.bossPin="__MIGRATED__";
   if(String(account.username||"").toLowerCase()==="staff")db.settings.staffPin="__MIGRATED__";
@@ -5697,7 +5716,7 @@ async function loginUser(){
   if(wasPlain){
     try{await rtSetPassword(account,password);saveDb();}catch(e){console.warn("Password migration failed",e);}
   }
-  account.weakPassword=!rtPasswordStrong(password)||rtKnownDefaultPin(password);
+  account.weakPassword=!rtPasswordStrong(password);
   currentSession={
     userId:account.id,
     username:account.username,
@@ -6208,7 +6227,7 @@ function renderDataHealth(){
   var duplicates=rtDuplicateIdCount();
   var weak=userList().filter(function(u){
     var plain=String(u.password||"");
-    return u.weakPassword||(plain&&(!rtPasswordStrong(plain)||rtKnownDefaultPin(plain)));
+    return u.weakPassword||(plain&&!rtPasswordStrong(plain));
   }).length;
   var bytes=0;
   try{bytes=new Blob([JSON.stringify(db)]).size;}catch(e){}
@@ -6217,8 +6236,8 @@ function renderDataHealth(){
   var score=100-negative*20-Math.min(20,missingCosts*3)-Math.min(20,missingLinks*2)-Math.min(20,duplicates*10)-Math.min(25,weak*10)-(RT_CLOUD_CONFLICT?25:0)-(RT_STORAGE_ERROR?30:0)-(mb>4.2?20:0);
   score=Math.max(0,Math.round(score));
   var scoreClass=score>=85?"good":score>=60?"warn":"bad";
-  var cloudClass=RT_CLOUD_CONFLICT?"bad":CLOUD_SYNC_ACTIVE?"good":"warn";
-  var cloudText=RT_CLOUD_CONFLICT?"Blocked to prevent overwrite":CLOUD_SYNC_ACTIVE?(RT_CLOUD_DIRTY?"Local changes waiting to sync":"Connected; no conflict detected"):"Offline or not verified";
+  var cloudClass=!SUPABASE_AUTH_REQUIRED?"warn":RT_CLOUD_CONFLICT?"bad":CLOUD_SYNC_ACTIVE?"good":"warn";
+  var cloudText=!SUPABASE_AUTH_REQUIRED?"Local browser mode; use JSON backups":RT_CLOUD_CONFLICT?"Blocked to prevent overwrite":CLOUD_SYNC_ACTIVE?(RT_CLOUD_DIRTY?"Local changes waiting to sync":"Connected; no conflict detected"):"Offline or not verified";
   card.innerHTML=
     '<div class="rt-health-head"><div><h2>Red-Team Data Health</h2><div class="small">Live checks for silent corruption, insecure defaults and sync risk.</div></div><div class="rt-health-score '+scoreClass+'">'+score+'/100</div></div>'+
     '<div class="rt-health-grid">'+
@@ -6231,7 +6250,7 @@ function renderDataHealth(){
       '<div class="rt-health-item '+cloudClass+'"><strong>Cloud sync</strong><small>'+esc(cloudText)+(CLOUD_LAST_SYNC?" Last: "+esc(CLOUD_LAST_SYNC):"")+'</small></div>'+
       '<div class="rt-health-item '+(RT_STORAGE_ERROR?"bad":"good")+'"><strong>Persistent save</strong><small>'+(RT_STORAGE_ERROR?esc(RT_STORAGE_ERROR):"Browser save is currently working.")+'</small></div>'+
     '</div>'+
-    '<div class="rt-production-warning"><strong>Current security boundary:</strong> Supabase Auth and Row Level Security now block unauthenticated access, and no PIN or business dataset is embedded in this HTML. The inventory is still stored as one shared <code>app_state</code> document, so section permissions remain a user-interface control rather than row-by-row data isolation. Split the document into protected tables before users with different confidentiality levels share the system. The activity log remains operational history, not tamper-proof evidence.</div>';
+    '<div class="rt-production-warning"><strong>Local-login security boundary:</strong> Accounts, permissions and inventory are saved in this browser. A technical user can inspect or modify browser data and bypass these controls. Use JSON backups regularly; do not treat this activity log as tamper-proof evidence.</div>';
 }
 
 var RT_BASE_RENDER_ALL=renderAll;
@@ -6300,6 +6319,11 @@ updateProjectionQty=function(product,value){
   if(!Number.isFinite(number)||number<0)return alert("Projection quantity must be zero or more.");
   return RT_BASE_UPDATE_PROJECTION.call(this,product,number);
 };
+
+var RT_LOCAL_LOGIN_USER=loginUser;
+var RT_LOCAL_LOGOUT_USER=logoutUser;
+var RT_LOCAL_SAVE_USER_ACCOUNT=saveUserAccount;
+var RT_LOCAL_DELETE_USER_ACCOUNT=deleteUserAccount;
 
 /* =========================================================
    SUPABASE AUTH BOUNDARY
@@ -6639,6 +6663,36 @@ deleteUserAccount=function(id){
   if(status)status.value="DEACTIVE";
   return false;
 };
+
+if(!SUPABASE_AUTH_REQUIRED){
+  loginUser=RT_LOCAL_LOGIN_USER;
+  logoutUser=RT_LOCAL_LOGOUT_USER;
+  saveUserAccount=RT_LOCAL_SAVE_USER_ACCOUNT;
+  deleteUserAccount=RT_LOCAL_DELETE_USER_ACCOUNT;
+  initCloudSync=async function(){
+    CLOUD_SYNC_ACTIVE=false;
+    CLOUD_LAST_SYNC="";
+    RT_CLOUD_DIRTY=false;
+    cloudStatus("Local browser mode","warn");
+    return false;
+  };
+  cloudPushData=async function(manual){
+    RT_CLOUD_DIRTY=false;
+    cloudStatus("Local browser mode","warn");
+    if(manual)alert("Cloud sync is disabled in local-login mode. Use Download JSON Backup to move data safely.");
+    return false;
+  };
+  cloudPullData=async function(manual){
+    cloudStatus("Local browser mode","warn");
+    if(manual)alert("Cloud sync is disabled in local-login mode. Use Import JSON Backup to restore data.");
+    return false;
+  };
+  cloudCheckConnection=async function(){
+    cloudStatus("Local browser mode","warn");
+    alert("Local login is active. Supabase login and cloud sync are disabled.");
+    return false;
+  };
+}
 
 function rtProtect(name,permission,bossOnly){
   var original=window[name];

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ALPACCO LOCAL LOGIN FINAL — 2026-07-21 -->
+<!-- ALPACCO TEAM SYNC FINAL — 2026-07-21 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -2461,7 +2461,21 @@ header{
     </div>
 
     <div class="login-note">
-      Accounts are managed in Settings and saved in this browser. Five failed attempts temporarily lock login on this device. This local login is a convenience control, not a server security boundary.
+      Accounts are managed in Settings. Five failed attempts temporarily lock login on this device. This local login is a convenience control, not a server security boundary.
+    </div>
+
+    <div id="teamSyncLoginSetup" class="login-note" style="margin-top:10px">
+      <b>First time on this device</b>
+      <div class="form-row" style="margin-top:8px">
+        <div class="field" style="margin:0">
+          <label>Team Sync Code</label>
+          <input id="loginTeamSyncCode" type="password" autocomplete="off" placeholder="Enter the shared team code">
+        </div>
+        <div class="field" style="margin:0;align-self:end">
+          <button type="button" class="btn-green" onclick="return connectTeamSync()">Connect Team Data</button>
+        </div>
+      </div>
+      <div id="teamSyncLoginMessage" class="small">Enter this once to load the shared Supabase inventory.</div>
     </div>
   </div>
 </div>
@@ -3211,14 +3225,23 @@ header{
     <div class="grid two">
       <div class="card">
         <h2>Cloud Sync — Supabase</h2>
-        <p class="small">This version can sync the full inventory database to Supabase. For first setup, run the SQL setup, then upload this browser data to Supabase once.</p>
+        <p class="small">All connected team devices share the same inventory. Usernames and PINs remain managed inside Settings.</p>
+        <div class="form-row">
+          <div class="field">
+            <label>Team Sync Code</label>
+            <input id="backupTeamSyncCode" type="password" autocomplete="off" placeholder="Enter the shared team code">
+          </div>
+          <div class="field" style="align-self:end">
+            <button class="btn-green" onclick="return connectTeamSync()">Connect Team Data</button>
+          </div>
+        </div>
         <div id="cloudSyncStatus" class="note-box">Cloud status: preparing...</div>
         <div class="actions">
           <button class="btn-green" onclick="cloudPushData(true)">Upload This Browser Data to Supabase</button>
           <button class="btn-blue" onclick="cloudPullData(true)">Load Data from Supabase</button>
           <button class="btn-light" onclick="cloudCheckConnection(true)">Test Cloud Connection</button>
         </div>
-        <div class="small">Simple rule for V9.0: after cloud is loaded, new changes auto-save to Supabase. Last saved change wins.</div>
+        <div class="small">After connection, changes auto-save and other devices check for updates. If two devices save together, the last saved change wins.</div>
       </div>
 
       <div class="card">
@@ -3265,6 +3288,8 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_Ia9eJXKFq0pGwVbCZw1M7A_hGiM0NCe
 const CLOUD_STATE_ID = "alpacco-main";
 const CLOUD_TABLE = "app_state";
 const SUPABASE_AUTH_REQUIRED = false;
+const TEAM_SYNC_FUNCTION = "team-sync";
+const TEAM_SYNC_CODE_KEY = "alpacco_team_sync_code_v1";
 const supabaseClient = (window.supabase && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
   : null;
@@ -3386,7 +3411,9 @@ async function cloudCheckConnection(showAlert=false){
   }
 }
 function scheduleCloudSave(){
-  if(CLOUD_LOADING || !CLOUD_SYNC_ACTIVE || !cloudAvailable())return;
+  if(CLOUD_LOADING || !CLOUD_SYNC_ACTIVE)return;
+  if(SUPABASE_AUTH_REQUIRED&&!cloudAvailable())return;
+  if(!SUPABASE_AUTH_REQUIRED&&!teamSyncConfigured())return;
   clearTimeout(CLOUD_SAVE_TIMER);
   CLOUD_SAVE_TIMER=setTimeout(()=>cloudPushData(false),1200);
 }
@@ -5542,9 +5569,9 @@ function saveDb(){
     var serialised=JSON.stringify(db);
     localStorage.setItem(STORAGE_KEY,serialised);
     RT_LAST_SAVED_SNAPSHOT=serialised;
-    RT_CLOUD_DIRTY=SUPABASE_AUTH_REQUIRED;
+    RT_CLOUD_DIRTY=teamSyncConfigured();
     rtClearSaveError();
-    if(SUPABASE_AUTH_REQUIRED)scheduleCloudSave();
+    if(teamSyncConfigured())scheduleCloudSave();
     return true;
   }catch(e){
     console.error("Persistent save failed:",e);
@@ -6236,8 +6263,8 @@ function renderDataHealth(){
   var score=100-negative*20-Math.min(20,missingCosts*3)-Math.min(20,missingLinks*2)-Math.min(20,duplicates*10)-Math.min(25,weak*10)-(RT_CLOUD_CONFLICT?25:0)-(RT_STORAGE_ERROR?30:0)-(mb>4.2?20:0);
   score=Math.max(0,Math.round(score));
   var scoreClass=score>=85?"good":score>=60?"warn":"bad";
-  var cloudClass=!SUPABASE_AUTH_REQUIRED?"warn":RT_CLOUD_CONFLICT?"bad":CLOUD_SYNC_ACTIVE?"good":"warn";
-  var cloudText=!SUPABASE_AUTH_REQUIRED?"Local browser mode; use JSON backups":RT_CLOUD_CONFLICT?"Blocked to prevent overwrite":CLOUD_SYNC_ACTIVE?(RT_CLOUD_DIRTY?"Local changes waiting to sync":"Connected; no conflict detected"):"Offline or not verified";
+  var cloudClass=RT_CLOUD_CONFLICT?"bad":CLOUD_SYNC_ACTIVE?"good":"warn";
+  var cloudText=!teamSyncConfigured()?"Enter the Team Sync Code once":RT_CLOUD_CONFLICT?"Blocked to prevent overwrite":CLOUD_SYNC_ACTIVE?(RT_CLOUD_DIRTY?"Local changes waiting to sync":"Team data connected"):"Offline or not verified";
   card.innerHTML=
     '<div class="rt-health-head"><div><h2>Red-Team Data Health</h2><div class="small">Live checks for silent corruption, insecure defaults and sync risk.</div></div><div class="rt-health-score '+scoreClass+'">'+score+'/100</div></div>'+
     '<div class="rt-health-grid">'+
@@ -6250,7 +6277,7 @@ function renderDataHealth(){
       '<div class="rt-health-item '+cloudClass+'"><strong>Cloud sync</strong><small>'+esc(cloudText)+(CLOUD_LAST_SYNC?" Last: "+esc(CLOUD_LAST_SYNC):"")+'</small></div>'+
       '<div class="rt-health-item '+(RT_STORAGE_ERROR?"bad":"good")+'"><strong>Persistent save</strong><small>'+(RT_STORAGE_ERROR?esc(RT_STORAGE_ERROR):"Browser save is currently working.")+'</small></div>'+
     '</div>'+
-    '<div class="rt-production-warning"><strong>Local-login security boundary:</strong> Accounts, permissions and inventory are saved in this browser. A technical user can inspect or modify browser data and bypass these controls. Use JSON backups regularly; do not treat this activity log as tamper-proof evidence.</div>';
+    '<div class="rt-production-warning"><strong>Local-login security boundary:</strong> Team inventory can sync through Supabase, but usernames, PIN checks and permissions are enforced by browser code. A technical user can bypass these local controls. Keep the Team Sync Code private, use JSON backups, and do not treat this activity log as tamper-proof evidence.</div>';
 }
 
 var RT_BASE_RENDER_ALL=renderAll;
@@ -6669,30 +6696,202 @@ if(!SUPABASE_AUTH_REQUIRED){
   logoutUser=RT_LOCAL_LOGOUT_USER;
   saveUserAccount=RT_LOCAL_SAVE_USER_ACCOUNT;
   deleteUserAccount=RT_LOCAL_DELETE_USER_ACCOUNT;
-  initCloudSync=async function(){
-    CLOUD_SYNC_ACTIVE=false;
-    CLOUD_LAST_SYNC="";
-    RT_CLOUD_DIRTY=false;
-    cloudStatus("Local browser mode","warn");
-    return false;
-  };
-  cloudPushData=async function(manual){
-    RT_CLOUD_DIRTY=false;
-    cloudStatus("Local browser mode","warn");
-    if(manual)alert("Cloud sync is disabled in local-login mode. Use Download JSON Backup to move data safely.");
-    return false;
-  };
-  cloudPullData=async function(manual){
-    cloudStatus("Local browser mode","warn");
-    if(manual)alert("Cloud sync is disabled in local-login mode. Use Import JSON Backup to restore data.");
-    return false;
-  };
-  cloudCheckConnection=async function(){
-    cloudStatus("Local browser mode","warn");
-    alert("Local login is active. Supabase login and cloud sync are disabled.");
-    return false;
-  };
 }
+
+var TEAM_SYNC_POLL_TIMER=null;
+
+function teamSyncCodeValue(){
+  try{return String(localStorage.getItem(TEAM_SYNC_CODE_KEY)||"");}catch(e){return "";}
+}
+
+function teamSyncConfigured(){
+  return !!teamSyncCodeValue();
+}
+
+function renderTeamSyncSetup(){
+  var connected=teamSyncConfigured();
+  var loginBox=document.getElementById("teamSyncLoginSetup");
+  var loginMessage=document.getElementById("teamSyncLoginMessage");
+  var backupInput=document.getElementById("backupTeamSyncCode");
+  if(loginBox)loginBox.style.display=connected?"none":"block";
+  if(loginMessage)loginMessage.textContent=connected?"Team data is connected on this device.":"Enter this once to load the shared Supabase inventory.";
+  if(backupInput)backupInput.placeholder=connected?"Connected — enter a new code to replace it":"Enter the shared team code";
+}
+
+async function teamSyncRequest(action,payload,codeOverride){
+  var code=String(codeOverride||teamSyncCodeValue()||"");
+  if(!code)throw new Error("Enter the Team Sync Code first.");
+  if(!SUPABASE_URL||!SUPABASE_PUBLISHABLE_KEY)throw new Error("Supabase is not configured in this HTML file.");
+  var response=await fetch(SUPABASE_URL+"/functions/v1/"+TEAM_SYNC_FUNCTION,{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "apikey":SUPABASE_PUBLISHABLE_KEY,
+      "x-team-sync-code":code
+    },
+    body:JSON.stringify(Object.assign({action:action},payload||{}))
+  });
+  var body={};
+  try{body=await response.json();}catch(e){}
+  if(!response.ok)throw new Error(body.error||("Team Sync failed ("+response.status+")."));
+  return body;
+}
+
+async function connectTeamSync(){
+  var loginInput=document.getElementById("loginTeamSyncCode");
+  var backupInput=document.getElementById("backupTeamSyncCode");
+  var code=String((loginInput&&loginInput.value)||(backupInput&&backupInput.value)||teamSyncCodeValue()||"").trim();
+  if(!code){alert("Enter the Team Sync Code.");return false;}
+  cloudStatus("Team Sync: connecting...","warn");
+  try{
+    await teamSyncRequest("test",{},code);
+    localStorage.setItem(TEAM_SYNC_CODE_KEY,code);
+    if(loginInput)loginInput.value="";
+    if(backupInput)backupInput.value="";
+    renderTeamSyncSetup();
+    CLOUD_SYNC_ACTIVE=true;
+    await cloudPullData(false);
+    startTeamSyncPolling();
+    cloudStatus("Team Sync: connected","ok");
+    alert("Team data connected on this device. Changes will now sync automatically.");
+  }catch(error){
+    CLOUD_SYNC_ACTIVE=false;
+    cloudStatus("Team Sync: connection failed","error");
+    alert("Team Sync connection failed: "+String(error&&error.message||error));
+  }
+  return false;
+}
+
+function startTeamSyncPolling(){
+  if(TEAM_SYNC_POLL_TIMER)clearInterval(TEAM_SYNC_POLL_TIMER);
+  if(!teamSyncConfigured())return;
+  TEAM_SYNC_POLL_TIMER=setInterval(function(){
+    if(!RT_CLOUD_DIRTY&&!CLOUD_LOADING)cloudPullData(false);
+  },15000);
+}
+
+initCloudSync=async function(){
+  renderTeamSyncSetup();
+  if(!teamSyncConfigured()){
+    CLOUD_SYNC_ACTIVE=false;
+    cloudStatus("Team Sync: enter code once","warn");
+    return false;
+  }
+  var ok=await cloudCheckConnection(false);
+  if(!ok)return false;
+  await cloudPullData(false);
+  startTeamSyncPolling();
+  return true;
+};
+
+cloudCheckConnection=async function(showAlert){
+  try{
+    var result=await teamSyncRequest("test");
+    CLOUD_SYNC_ACTIVE=true;
+    if(result.updated_at)RT_REMOTE_UPDATED_AT=result.updated_at;
+    cloudStatus("Team Sync: connected","ok");
+    if(showAlert)alert("Team Sync connection is working.");
+    return true;
+  }catch(error){
+    CLOUD_SYNC_ACTIVE=false;
+    cloudStatus("Team Sync: connection failed","error");
+    if(showAlert)alert("Team Sync connection failed: "+String(error&&error.message||error));
+    return false;
+  }
+};
+
+cloudPushData=async function(manual){
+  manual=manual===true;
+  if(!teamSyncConfigured()){
+    cloudStatus("Team Sync: enter code once","warn");
+    if(manual)alert("Enter the Team Sync Code first.");
+    return false;
+  }
+  if(manual&&(!currentSession||!userCanAccess("backup"))){alert("Backup permission required to upload team data manually.");return false;}
+  if(!currentSession&&!manual)return false;
+  try{
+    cloudStatus("Team Sync: saving...","warn");
+    var payload=clone(db);
+    payload.meta=payload.meta||{};
+    payload.meta.schemaVersion="10.0";
+    payload.meta.cloudSavedAt=new Date().toISOString();
+    payload.meta.cloudSavedBy=currentSession&&currentSession.name||"System";
+    var result=await teamSyncRequest("push",{data:payload});
+    RT_REMOTE_UPDATED_AT=result.updated_at||new Date().toISOString();
+    RT_CLOUD_DIRTY=false;
+    RT_CLOUD_CONFLICT=false;
+    CLOUD_SYNC_ACTIVE=true;
+    CLOUD_LAST_SYNC=localDateTime(RT_REMOTE_UPDATED_AT);
+    cloudStatus("Team Sync: saved","ok");
+    renderDataHealth();
+    if(manual)alert("This browser data was uploaded to the team successfully.");
+    return true;
+  }catch(error){
+    CLOUD_SYNC_ACTIVE=false;
+    cloudStatus("Team Sync: save failed","error");
+    console.error("Team Sync save failed",error);
+    if(manual)alert("Team Sync save failed: "+String(error&&error.message||error));
+    return false;
+  }
+};
+
+cloudPullData=async function(manual){
+  manual=manual===true;
+  if(!teamSyncConfigured()){
+    cloudStatus("Team Sync: enter code once","warn");
+    if(manual)alert("Enter the Team Sync Code first.");
+    return false;
+  }
+  if(manual&&(!currentSession||!userCanAccess("backup"))){alert("Backup permission required to load team data manually.");return false;}
+  if(RT_CLOUD_DIRTY&&!manual)return false;
+  try{
+    cloudStatus("Team Sync: checking...","warn");
+    var result=await teamSyncRequest("pull");
+    if(!result.data){
+      CLOUD_SYNC_ACTIVE=true;
+      RT_REMOTE_UPDATED_AT="";
+      cloudStatus("Team Sync: empty — upload once","warn");
+      if(manual)alert("Team Sync is connected but empty. Use Upload This Browser Data to Supabase once.");
+      return false;
+    }
+    if(!manual&&result.updated_at&&result.updated_at===RT_REMOTE_UPDATED_AT){
+      CLOUD_SYNC_ACTIVE=true;
+      cloudStatus("Team Sync: up to date","ok");
+      return true;
+    }
+    if(manual&&RT_CLOUD_DIRTY){
+      if(!confirm("Unsynced browser changes exist. Loading team data replaces them. Continue?"))return false;
+      exportBackup("pre-team-sync-load-backup");
+    }
+    CLOUD_LOADING=true;
+    db=normalizeDb(result.data);
+    db.meta=db.meta||{};
+    db.meta.schemaVersion="10.0";
+    var serialised=JSON.stringify(db);
+    localStorage.setItem(STORAGE_KEY,serialised);
+    RT_LAST_SAVED_SNAPSHOT=serialised;
+    RT_REMOTE_UPDATED_AT=result.updated_at||"";
+    RT_CLOUD_DIRTY=false;
+    RT_CLOUD_CONFLICT=false;
+    CLOUD_SYNC_ACTIVE=true;
+    CLOUD_LAST_SYNC=localDateTime(RT_REMOTE_UPDATED_AT||new Date().toISOString());
+    CLOUD_LOADING=false;
+    renderAll();
+    applyRoleView(true);
+    syncLoginOverlay();
+    renderTeamSyncSetup();
+    cloudStatus("Team Sync: loaded","ok");
+    if(manual)alert("Latest team data loaded.");
+    return true;
+  }catch(error){
+    CLOUD_LOADING=false;
+    CLOUD_SYNC_ACTIVE=false;
+    cloudStatus("Team Sync: load failed","error");
+    console.error("Team Sync load failed",error);
+    if(manual)alert("Team Sync load failed: "+String(error&&error.message||error));
+    return false;
+  }
+};
 
 function rtProtect(name,permission,bossOnly){
   var original=window[name];
@@ -6762,6 +6961,7 @@ window.toggleAllPermission=toggleAllPermission;
 window.cloudPushData=cloudPushData;
 window.cloudPullData=cloudPullData;
 window.cloudCheckConnection=cloudCheckConnection;
+window.connectTeamSync=connectTeamSync;
 window.renderCountItemSettingsPreview=renderCountItemSettingsPreview;
 window.selectAllCountItems=selectAllCountItems;
 window.clearSelectedCountItems=clearSelectedCountItems;

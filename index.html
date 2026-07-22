@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ALPACCO PROFESSIONAL UI + TEAM SYNC + FULL BUSINESS RESET — 2026-07-21 -->
+<!-- ALPACCO PROFESSIONAL UI + TEAM SYNC + BOSS-ONLY DANGER PASSWORD + EFFECTIVE-DATED PRICE/COST — 2026-07-22 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -1417,11 +1417,35 @@ h3{
   gap:12px;
 }
 
+/* Effective-dated pricing and cost control */
+.price-cost-panel{grid-column:1/-1}
+.price-cost-form{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:12px;align-items:end;margin-top:14px}
+.price-cost-impact{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin-top:14px}
+.price-cost-impact .impact-box{background:#fff;border:1px solid #ead7d2;border-radius:14px;padding:12px}
+.impact-box .impact-label{font-size:11px;font-weight:900;text-transform:uppercase;color:#93404c}
+.impact-box .impact-value{font-size:20px;font-weight:950;color:#640818;margin-top:4px}
+.price-history-list{display:grid;gap:8px;margin-top:14px}
+.price-history-row{display:grid;grid-template-columns:110px minmax(170px,1fr) 130px 130px minmax(160px,1fr) auto;gap:10px;align-items:center;background:#fff;border:1px solid #ead7d2;border-radius:13px;padding:10px}
+.price-history-row .history-type{font-weight:900;color:#7d0b20}
+.price-cost-warning{margin-top:10px;background:#fff4df;border-left:4px solid #ef9d32;border-radius:10px;padding:10px;color:#7c3b12}
+@media(max-width:1100px){.price-cost-form{grid-template-columns:1fr 1fr}.price-cost-impact{grid-template-columns:1fr 1fr}.price-history-row{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.price-cost-form,.price-cost-impact,.price-history-row{grid-template-columns:1fr}}
+
 .settings-panel{
   background:#fffdfb;
   border:1px solid var(--line);
   border-radius:16px;
   padding:14px;
+}
+
+.danger-password-panel{
+  grid-column:1/-1;
+  border-color:#ebcbd1;
+  background:linear-gradient(180deg,#fff 0,#fffafa 100%);
+}
+
+.danger-password-panel h3{
+  color:#9d2639;
 }
 
 .settings-check-list{
@@ -4204,6 +4228,48 @@ tr:hover td{
           </div>
           <div class="small">These settings are saved in this browser with your local inventory data.</div>
         </div>
+
+        <div class="settings-panel price-cost-panel">
+          <h3>Price &amp; Raw Cost Effective Dates</h3>
+          <div class="small">Boss only. Schedule a selling-price or raw-material-cost change without rewriting earlier sales months.</div>
+          <div class="price-cost-warning"><b>Monthly accuracy rule:</b> SALES_IN is stored by month, not by individual sale date. Choose the first day of a month (for example 2026-08-01). The impact preview recalculates recorded sales from that month onward.</div>
+          <div class="price-cost-form">
+            <div class="field"><label>Change Type</label><select id="priceCostType" onchange="renderPriceCostItemOptions()"><option value="SELLING_PRICE">Selling Price</option><option value="RAW_COST">Raw Material Cost</option></select></div>
+            <div class="field"><label>Product / Raw Material</label><select id="priceCostItem" onchange="previewPriceCostImpact()"></select></div>
+            <div class="field"><label>Effective Start Date</label><input id="priceCostStartDate" type="date" onchange="previewPriceCostImpact()"></div>
+            <div class="field"><label>New Value (RM)</label><input id="priceCostNewValue" type="number" min="0" step="0.0001" oninput="previewPriceCostImpact()"></div>
+            <div class="field"><label>Reason / Note</label><input id="priceCostNote" maxlength="120" placeholder="Supplier increase, menu revision..."></div>
+          </div>
+          <div class="actions" style="margin-top:12px"><button type="button" class="btn-light" onclick="previewPriceCostImpact()">Preview Impact</button><button type="button" class="btn-green" onclick="savePriceCostChange()">Save Effective Change</button></div>
+          <div id="priceCostCurrent" class="note-box" style="margin-top:12px"></div>
+          <div id="priceCostImpact" class="price-cost-impact"></div>
+          <h3 style="margin-top:18px">Change History</h3>
+          <div id="priceCostHistory" class="price-history-list"></div>
+        </div>
+
+        <div class="settings-panel danger-password-panel">
+          <h3>Danger Zone Protection</h3>
+          <div id="dangerPasswordStatus" class="password-reset-note">Checking deletion-password protection...</div>
+          <div class="small" style="margin:10px 0">Set a separate password that is known only by the Boss. It cannot be the same as the 4-digit Boss login PIN.</div>
+          <div class="form-row">
+            <div class="field">
+              <label>Current Boss PIN</label>
+              <input id="dangerCurrentBossPin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="Confirm your Boss PIN" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)">
+            </div>
+            <div class="field">
+              <label>New Deletion Password</label>
+              <input id="dangerNewPassword" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="At least 8 characters">
+              <div class="field-help">Use 8–72 characters with at least one letter and one number. Do not share it with staff.</div>
+            </div>
+            <div class="field">
+              <label>Confirm Deletion Password</label>
+              <input id="dangerConfirmPassword" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="Enter it again">
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn-red" onclick="saveDangerDeletePassword()">Set / Change Deletion Password</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -4251,7 +4317,8 @@ tr:hover td{
           <li>Activity logs and uploaded proof images</li>
         </ul>
         <div class="danger-keep-note"><b>Kept:</b> Boss/Staff accounts, PINs, permissions, system settings, and Team Sync connection.</div>
-        <button class="btn-red" onclick="clearAllData()">Clear All Business Data</button>
+        <div id="dangerDeletePasswordState" class="password-reset-note">Checking deletion-password protection...</div>
+        <button id="clearAllBusinessDataButton" class="btn-red" onclick="clearAllData()">Clear All Business Data</button>
       </div>
     </div>
   </section>
@@ -4305,6 +4372,10 @@ function normalizeDb(d){
   d.menu=d.menu||[]; d.expenses=d.expenses||[]; d.sales=d.sales||[]; d.recipes=d.recipes||{};
   d.ingredientMap=d.ingredientMap||{}; d.salesUploads=d.salesUploads||[]; d.salesDifferences=d.salesDifferences||[];
   d.projectionQty=d.projectionQty||{};
+  d.priceCostHistory=Array.isArray(d.priceCostHistory)?d.priceCostHistory:[];
+  d.priceCostHistory=d.priceCostHistory.filter(x=>x&&["SELLING_PRICE","RAW_COST"].includes(x.type)&&x.itemKey&&x.effectiveFrom&&Number.isFinite(Number(x.value))).map(x=>({
+    id:x.id||uid("PCH"),type:x.type,itemKey:String(x.itemKey),effectiveFrom:String(x.effectiveFrom).slice(0,10),value:Number(x.value),note:String(x.note||""),createdAt:x.createdAt||nowIso(),createdBy:x.createdBy||"System"
+  }));
   d.stockCounts=d.stockCounts||[];
   d.activityLogs=d.activityLogs||[];
   d.settings=d.settings||{};
@@ -4351,6 +4422,9 @@ function normalizeDb(d){
   d.settings.stockCountItemIds=d.settings.stockCountItemIds||[];
   d.settings.requireWastageProof=d.settings.requireWastageProof!==false;
   d.settings.allowStaffEdit=d.settings.allowStaffEdit===true;
+  d.settings.dangerDeletePasswordHash=String(d.settings.dangerDeletePasswordHash||"");
+  d.settings.dangerDeletePasswordSalt=String(d.settings.dangerDeletePasswordSalt||"");
+  d.settings.dangerDeletePasswordIterations=Number(d.settings.dangerDeletePasswordIterations||210000);
   d.stockCounts.forEach(c=>{c.id=c.id||uid("COUNT");c.createdAt=c.createdAt||`${c.date||today()}T00:00:00`;c.items=c.items||[];if(c.proofImage&&!c.proofUploadedAt)c.proofUploadedAt=c.createdAt;});
   d.activityLogs.forEach(l=>{l.id=l.id||uid("LOG");l.createdAt=l.createdAt||nowIso();l.user=l.user||"System";l.role=l.role||"SYSTEM";l.action=l.action||"SYSTEM";l.module=l.module||"-";l.details=l.details||"";});
   d.rawMaterials.forEach(p=>{p.minStock=Number(p.minStock??1);p.image=p.image||"";p.pic=p.pic||"";p.createdAt=p.createdAt||p.createdDate||"";p.updatedAt=p.updatedAt||"";});
@@ -4642,7 +4716,7 @@ function kpiCard(title,value,note,cls=""){return `<div class="card"><div class="
 function renderDashboard(){
   const month=selected("dashMonth")||MONTHS[new Date().getMonth()], year=Number(selected("dashYear")||new Date().getFullYear());
   const sales=salesForMonth(month,year), cogs=outCostForMonth(month,year), exp=expensesForMonth(month,year), gross=sales.sales-cogs, net=gross-exp;
-  const raws=filteredRawForDashboard(); const low=raws.filter(p=>stockStats(p.id).balance<=Number(p.minStock||0)).length; const stockValue=raws.reduce((s,p)=>s+stockStats(p.id).balance*Number(p.costPerUnit||0),0);
+  const raws=filteredRawForDashboard(); const low=raws.filter(p=>stockStats(p.id).balance<=Number(p.minStock||0)).length; const stockValue=raws.reduce((s,p)=>s+stockStats(p.id).balance*rawCostAt(p,today()),0);
   setHtml("dashboardKpis",[
     kpiCard("Monthly Sales",money(sales.sales),month+" "+year),
     kpiCard("COGS / Stock Used",money(cogs),"From OUT_STOCK"),
@@ -4922,7 +4996,7 @@ function rawRowHtml(p){
     ${rawAvatar(p)}
     <div class="row-main"><strong>${esc(p.id)}</strong><div class="name">${esc(p.name)}</div><div class="meta">${esc(p.category||"-")} • Unit Size: ${esc(p.unitSize||"-")} • UOM: ${esc(p.uom||"-")}</div></div>
     <div class="row-cell"><div class="label">Current Balance</div><div class="val ${st.balance<=Number(p.minStock||0)?'red-text':'green-text'}">${qty(st.balance)} ${esc(p.uom||"")}</div></div>
-    <div class="row-cell"><div class="label">Stock Value</div><div class="val">${money(st.balance*Number(p.costPerUnit||0))}</div></div>
+    <div class="row-cell"><div class="label">Stock Value</div><div class="val">${money(st.balance*rawCostAt(p,today()))}</div></div>
     <div class="row-cell"><div class="label">Low Level</div><div class="val">${qty(p.minStock)}</div></div>
     <div class="row-cell"><div class="label">Supplier</div><div class="val" style="font-size:12px">${esc(p.supplier||"-")}</div></div>
     <div class="row-actions"><span class="status ${active?'ok':'deactive'}">${esc(p.status||"-")}</span><span class="status ${status.cls}">${status.label}</span><button class="btn-light" onclick="openRawModal('${jsq(p.id)}')">Edit</button></div>
@@ -4945,7 +5019,7 @@ function openRawModal(id=""){
     <div class="form-row"><div class="field"><label>Person In Charge</label><input id="rawPic" required value="${esc(p.pic||"")}" placeholder="Staff name"></div><div class="field"><label>Products ID</label><input id="rawId" required value="${esc(p.id||"")}" placeholder="Example: B001-RRPROMAX"></div></div>
     <div class="form-row"><div class="field"><label>Products Name</label><input id="rawName" required value="${esc(p.name||"")}"></div><div class="field"><label>Category</label><input id="rawCategory" value="${esc(p.category||"")}"></div></div>
     <div class="form-row"><div class="field"><label>Original Packaging / Unit Size</label><input id="rawUnitSize" value="${esc(p.unitSize||"")}" placeholder="Example: 1KG / 500G / 1 bottle"></div><div class="field"><label>UOM</label><input id="rawUom" required value="${esc(p.uom||"")}" placeholder="KG, L, UNIT, BOTTLE"></div></div>
-    <div class="form-row"><div class="field"><label>Cost Per Unit (RM)</label><input id="rawCost" type="number" step="0.0001" value="${Number(p.costPerUnit||0)}"></div><div class="field"><label>Low Stock Level</label><input id="rawMin" type="number" step="0.01" value="${Number(p.minStock||1)}"></div></div>
+    <div class="form-row"><div class="field"><label>Cost Per Unit (RM)</label><input id="rawCost" type="number" step="0.0001" value="${id?rawCostAt(p,today()):Number(p.costPerUnit||0)}" ${id?'readonly title="Use Settings → Price & Raw Cost Effective Dates"':''}><div class="field-help">${id?'Change cost in Settings → Price & Raw Cost Effective Dates so old months stay correct.':'Opening cost for this new raw material.'}</div></div><div class="field"><label>Low Stock Level</label><input id="rawMin" type="number" step="0.01" value="${Number(p.minStock||1)}"></div></div>
     <div class="form-row"><div class="field"><label>Status</label><select id="rawStatus"><option ${p.status==="ACTIVE"?"selected":""}>ACTIVE</option><option ${p.status==="DEACTIVE"?"selected":""}>DEACTIVE</option></select></div><div class="field"><label>Payment Method</label><input id="rawPayment" value="${esc(p.paymentMethod||"")}"></div></div>
     <div class="field"><label>Supplier</label><input id="rawSupplier" value="${esc(p.supplier||"")}"></div>
     <div class="field"><label>Ingredient Image</label><input id="rawImage" type="file" accept="image/*"><div class="small">Leave empty to keep existing image.</div></div>
@@ -4958,8 +5032,8 @@ async function saveRawModal(){
   if(edit&&edit!==id&&exists)return alert("New Products ID already exists.");
   const old=edit?rawById(edit):{};
   const img=await readImage("rawImage");
-  const item={id,name:selected("rawName").trim(),category:selected("rawCategory").trim(),unitSize:selected("rawUnitSize").trim(),uom:selected("rawUom").trim(),costPerUnit:Number(selected("rawCost")||0),status:selected("rawStatus"),supplier:selected("rawSupplier").trim(),paymentMethod:selected("rawPayment").trim(),minStock:Number(selected("rawMin")||1),image:img||old?.image||"",pic,createdAt:old?.createdAt||modalOpenedAt,updatedAt:nowIso(),entryOpenedAt:modalOpenedAt};
-  if(edit){db.rawMaterials=db.rawMaterials.map(x=>x.id===edit?item:x); if(edit!==id){db.stockIn.forEach(t=>{if(t.productId===edit)t.productId=id}); db.stockOut.forEach(t=>{if(t.productId===edit)t.productId=id}); Object.values(db.ingredientMap).forEach(m=>{if(m.productId===edit)m.productId=id});}}
+  const item={id,name:selected("rawName").trim(),category:selected("rawCategory").trim(),unitSize:selected("rawUnitSize").trim(),uom:selected("rawUom").trim(),costPerUnit:edit?Number(old.costPerUnit||0):Number(selected("rawCost")||0),status:selected("rawStatus"),supplier:selected("rawSupplier").trim(),paymentMethod:selected("rawPayment").trim(),minStock:Number(selected("rawMin")||1),image:img||old?.image||"",pic,createdAt:old?.createdAt||modalOpenedAt,updatedAt:nowIso(),entryOpenedAt:modalOpenedAt};
+  if(edit){db.rawMaterials=db.rawMaterials.map(x=>x.id===edit?item:x); if(edit!==id){db.stockIn.forEach(t=>{if(t.productId===edit)t.productId=id}); db.stockOut.forEach(t=>{if(t.productId===edit)t.productId=id}); Object.values(db.ingredientMap).forEach(m=>{if(m.productId===edit)m.productId=id}); (db.priceCostHistory||[]).forEach(function(row){if(row.type==="RAW_COST"&&row.itemKey===edit)row.itemKey=id;});}}
   else db.rawMaterials.push(item);
   closeModal(); renderAll();
 }
@@ -5042,9 +5116,9 @@ function importStockInCsv(event){
         if(!raw){skipped++; skippedRows.push(`Row ${idx+2}: raw material not found - ${r[productCol]||""}`); return;}
         const q=parseNumberFromCsv(r[qtyCol]);
         if(q<=0){skipped++; skippedRows.push(`Row ${idx+2}: quantity is empty or zero`); return;}
-        const unitPrice=unitPriceCol>=0 && String(r[unitPriceCol]||"").trim()!=="" ? parseNumberFromCsv(r[unitPriceCol]) : Number(raw.costPerUnit||0);
         const date=dateCol>=0?normaliseDateForImport(r[dateCol]):today();
         if(!date){skipped++; skippedRows.push(`Row ${idx+2}: invalid date - ${r[dateCol]||""}`); return;}
+        const unitPrice=unitPriceCol>=0 && String(r[unitPriceCol]||"").trim()!=="" ? parseNumberFromCsv(r[unitPriceCol]) : rawCostAt(raw,date);
         const reference=refCol>=0?String(r[refCol]||"Imported from CSV").trim():"Imported from CSV";
         const candidate={date,productId:raw.id,qty:q,unitPrice,reference};
         if(db.stockIn.some(t=>rtStockInFingerprint(t)===rtStockInFingerprint(candidate))){skipped++; skippedRows.push(`Row ${idx+2}: exact duplicate stock-in`); return;}
@@ -5101,9 +5175,9 @@ function importStockOutCsv(event){
         if(!raw){skipped++; skippedRows.push(`Row ${idx+2}: raw material not found - ${r[productCol]||""}`); return;}
         const q=parseNumberFromCsv(r[qtyCol]);
         if(q<=0){skipped++; skippedRows.push(`Row ${idx+2}: quantity is empty or zero`); return;}
-        const unitCost=unitCostCol>=0 && String(r[unitCostCol]||"").trim()!=="" ? parseNumberFromCsv(r[unitCostCol]) : Number(raw.costPerUnit||0);
         const date=dateCol>=0?normaliseDateForImport(r[dateCol]):today();
         if(!date){skipped++; skippedRows.push(`Row ${idx+2}: invalid date - ${r[dateCol]||""}`); return;}
+        const unitCost=unitCostCol>=0 && String(r[unitCostCol]||"").trim()!=="" ? parseNumberFromCsv(r[unitCostCol]) : rawCostAt(raw,date);
         const createdAt=createdAtFromImport(date, timeCol>=0?r[timeCol]:"00:00:00");
         if(!createdAt){skipped++; skippedRows.push(`Row ${idx+2}: invalid time - ${timeCol>=0?r[timeCol]||"":""}`); return;}
         const typeRaw=typeCol>=0?String(r[typeCol]||"").trim():"Production Use";
@@ -5165,7 +5239,7 @@ function openStockInModal(){
     <div class="form-row"><div class="field"><label>Receipt Photo</label><input id="inReceipt" type="file" accept="image/*"></div><div class="field"><label>Stock Quantity Photo</label><input id="inQtyImg" type="file" accept="image/*"></div></div>
   `, saveStockInModal, syncInProduct);
 }
-function syncInProduct(){const p=rawById(selected("inProductId")); if(!p)return; document.getElementById("inUom").value=p.uom||""; document.getElementById("inPrice").value=Number(p.costPerUnit||0); setHtml("inHelp",`Original packaging: <b>${esc(p.unitSize||"-")}</b>. UOM meaning: you are recording quantity by <b>${esc(p.uom||"-")}</b>.`); calcInTotal();}
+function syncInProduct(){const p=rawById(selected("inProductId")); if(!p)return; document.getElementById("inUom").value=p.uom||""; document.getElementById("inPrice").value=rawCostAt(p,selected("inDate")||today()); setHtml("inHelp",`Original packaging: <b>${esc(p.unitSize||"-")}</b>. UOM meaning: you are recording quantity by <b>${esc(p.uom||"-")}</b>.`); calcInTotal();}
 function calcInTotal(){const q=Number(selected("inQty")||0),p=Number(selected("inPrice")||0); const el=document.getElementById("inTotal"); if(el)el.value=(q*p).toFixed(2);}
 async function saveStockInModal(){
   const p=rawById(selected("inProductId")); if(!p)return alert("Please select product.");
@@ -5193,7 +5267,7 @@ function openStockOutModal(){
     <div class="field"><label>Relevant Proof Image <span id="proofRequiredLabel" class="small"></span></label><input id="outProof" type="file" accept="image/*" capture="environment"><div class="small">Camera is requested. Exact image duplicate will be blocked.</div></div>
   `, saveStockOutModal, ()=>{syncOutProduct();toggleOutProof();});
 }
-function syncOutProduct(){const p=rawById(selected("outProductId")); if(!p)return; document.getElementById("outUom").value=p.uom||""; document.getElementById("outPrice").value=Number(p.costPerUnit||0); setHtml("outHelp",`Original packaging: <b>${esc(p.unitSize||"-")}</b>. UOM meaning: stock out is counted by <b>${esc(p.uom||"-")}</b>.`); calcOutTotal();}
+function syncOutProduct(){const p=rawById(selected("outProductId")); if(!p)return; document.getElementById("outUom").value=p.uom||""; document.getElementById("outPrice").value=rawCostAt(p,selected("outDate")||today()); setHtml("outHelp",`Original packaging: <b>${esc(p.unitSize||"-")}</b>. UOM meaning: stock out is counted by <b>${esc(p.uom||"-")}</b>.`); calcOutTotal();}
 function calcOutTotal(){const q=Number(selected("outQty")||0),p=Number(selected("outPrice")||0); const el=document.getElementById("outTotal"); if(el)el.value=(q*p).toFixed(2);}
 function proofRequiredType(type){return db.settings?.requireWastageProof!==false && ["Wastage","Rotten / Expired"].includes(type);}
 function toggleOutProof(){const req=proofRequiredType(selected("outType")); setHtml("proofRequiredLabel",req?`<span class="red-text">Required</span>`:`Optional`);}
@@ -5520,12 +5594,12 @@ function renderProjection(){
   const calc=projectionMaterialTotals(qtyMap), t=calc.totals;
   setHtml("projectionKpis",[kpiCard("Forecast Units",qty(t.qty),"Projected product units"),kpiCard("Projected Sales",money(t.sales),"Selling price × qty"),kpiCard("Projected Cost",money(t.cost),"Food cost + wastage cost"),kpiCard("Projected GP",money(t.gp),t.sales?pct(t.gp/t.sales*100):"0.0%",t.gp>=0?"green-text":"red-text")].join(""));
   setHtml("projectionProductRows",projectionProducts.map(m=>{
-    const f=Number(db.projectionQty[m.product]||0), bd=recipeBreakdown(m.product), cost=bd.total, sales=f*Number(m.sellingPrice||0), gp=sales-f*cost, margin=sales?gp/sales*100:0;
+    const f=Number(db.projectionQty[m.product]||0), bd=recipeBreakdown(m.product,today()), cost=bd.total, currentPrice=sellingPriceAt(m,today()), sales=f*currentPrice, gp=sales-f*cost, margin=sales?gp/sales*100:0;
     const status=menuStatus(m);
     return `<div class="sales-row">
       <div><strong>${esc(m.product)}</strong><div class="small">${esc(m.category||"-")} • <span class="status ${status==="ACTIVE"?"ok":"deactive"}">${status}</span></div></div>
       <div><input class="input-mini right" type="number" min="0" step="1" value="${f}" onchange="updateProjectionQty('${jsq(m.product)}',this.value)"></div>
-      <div class="right">${money(m.sellingPrice)}</div>
+      <div class="right">${money(currentPrice)}</div>
       <div class="right">${money(cost)}<div class="small">Food ${money(bd.food)} + Wastage ${money(bd.waste)}</div></div>
       <div class="right">${money(sales)}</div>
       <div class="right ${gp>=0?'green-text':'red-text'}">${money(gp)}</div>
@@ -5577,12 +5651,12 @@ function ingredientLineCost(ingredientName,amount){
   const map=db.ingredientMap[ingredientName]||{};
   const raw=rawById(map.productId);
   if(!raw)return 0;
-  return Number(amount||0)*Number(map.factor||1)*Number(raw.costPerUnit||0);
+  return Number(amount||0)*Number(map.factor||1)*rawCostAt(raw,today());
 }
 function renderRecipes(){
   const q=selected("recipeSearch").toLowerCase();
   const rows=db.menu.filter(m=>!q||`${m.product} ${m.category} ${m.status||"ACTIVE"}`.toLowerCase().includes(q)).map(m=>{
-    const bd=recipeBreakdown(m.product), price=Number(m.sellingPrice||0), gp=price-bd.total, margin=price?gp/price*100:0, ingredients=Object.entries(db.recipes[m.product]||{});
+    const bd=recipeBreakdown(m.product,today()), price=sellingPriceAt(m,today()), gp=price-bd.total, margin=price?gp/price*100:0, ingredients=Object.entries(db.recipes[m.product]||{});
     const status=menuStatus(m);
     const ingredientPills = ingredients.slice(0,7).map(([i,a])=>{
       const c=ingredientLineCost(i,a);
@@ -5620,7 +5694,7 @@ function openRecipeModal(product=""){
       <div class="field"><label>Category</label><input id="recipeCategory" value="${esc(m.category||"")}"></div>
     </div>
     <div class="form-row">
-      <div class="field"><label>Selling Price (RM)</label><input id="recipePrice" type="number" step="0.01" value="${Number(m.sellingPrice||0)}" oninput="updateRecipeCostPreview()"></div>
+      <div class="field"><label>Selling Price (RM)</label><input id="recipePrice" type="number" step="0.01" value="${product?sellingPriceAt(m,today()):Number(m.sellingPrice||0)}" ${product?'readonly title="Use Settings → Price & Raw Cost Effective Dates"':''} oninput="updateRecipeCostPreview()"><div class="field-help">${product?'Change price in Settings → Price & Raw Cost Effective Dates so old months stay correct.':'Opening price for this new product.'}</div></div>
       <div class="field"><label>Auto Wastage Percentage (%)</label><input id="recipeWastagePercent" type="number" step="0.01" min="0" value="${Number(m.wastagePercent||0)}" oninput="updateRecipeCostPreview()"></div>
     </div>
     <div class="form-row">
@@ -5642,7 +5716,7 @@ function openRecipeModal(product=""){
 function recipeRawCostPreview(rawId){
   const raw=rawById(rawId);
   if(!raw)return "Not linked";
-  return `${money(raw.costPerUnit)} / ${raw.uom||"-"}`;
+  return `${money(rawCostAt(raw,today()))} / ${raw.uom||"-"}`;
 }
 function recipeRawUomPreview(rawId){
   const raw=rawById(rawId);
@@ -5665,7 +5739,7 @@ function updateRecipeCostPreview(){
     const raw=rawById(rawId);
     const amount=Number(row.querySelector(".ri-amount")?.value||0);
     const factor=Number(row.querySelector(".ri-factor")?.value||0);
-    const line=raw ? amount*factor*Number(raw.costPerUnit||0) : 0;
+    const line=raw ? amount*factor*rawCostAt(raw,today()) : 0;
     const rawCost=row.querySelector(".ri-raw-cost");
     const lineCost=row.querySelector(".ri-line-cost");
     if(rawCost)rawCost.value=recipeRawCostPreview(rawId);
@@ -5696,7 +5770,7 @@ function addRecipeIngredientRow(ing="",amt=0){
     <div class="field"><label>Link RAW_LIST</label><select class="ri-raw" onchange="syncRecipeRawRow(this);updateRecipeCostPreview()">${allRawOptions(map.productId||"")}</select></div>
     <div class="field"><label>Factor</label><input class="ri-factor" type="number" step="0.000001" value="${Number(map.factor||1)}" oninput="updateRecipeCostPreview()"></div>
     <div class="field"><label>Raw Cost</label><input class="ri-raw-cost" readonly value="${recipeRawCostPreview(map.productId||"")}"></div>
-    <div class="field"><label>Line Cost</label><input class="ri-line-cost" readonly value="${money(Number(amt||0)*Number(map.factor||1)*Number(rawById(map.productId)?.costPerUnit||0))}"></div>
+    <div class="field"><label>Line Cost</label><input class="ri-line-cost" readonly value="${money(Number(amt||0)*Number(map.factor||1)*rawCostAt(map.productId,today()))}"></div>
     <div class="field"><label>Note / UOM</label><input class="ri-note" value="${esc(map.note||recipeRawUomPreview(map.productId||""))}" oninput="updateRecipeCostPreview()"></div>
     <button class="btn-red" type="button" onclick="this.closest('.recipe-editor-row').remove();updateRecipeCostPreview()">Remove</button>
   </div>`;
@@ -5705,11 +5779,11 @@ function addRecipeIngredientRow(ing="",amt=0){
 }
 function saveRecipeModal(){
   const old=selected("recipeOldProduct"), product=selected("recipeProduct").trim(); if(!product)return alert("Product name is required.");
-  let foodCostFromRows=0; document.querySelectorAll(".recipe-editor-row").forEach(row=>{const raw=rawById(row.querySelector(".ri-raw")?.value||""); if(raw){foodCostFromRows+=Number(row.querySelector(".ri-amount")?.value||0)*Number(row.querySelector(".ri-factor")?.value||0)*Number(raw.costPerUnit||0);}}); const item={product,category:selected("recipeCategory").trim(),sellingPrice:Number(selected("recipePrice")||0),wastagePercent:Number(selected("recipeWastagePercent")||0),status:selected("recipeStatus")||"ACTIVE",costPerServing:foodCostFromRows};
+  let foodCostFromRows=0; document.querySelectorAll(".recipe-editor-row").forEach(row=>{const raw=rawById(row.querySelector(".ri-raw")?.value||""); if(raw){foodCostFromRows+=Number(row.querySelector(".ri-amount")?.value||0)*Number(row.querySelector(".ri-factor")?.value||0)*rawCostAt(raw,today());}}); const previous=old?menuByProduct(old):null; const item={product,category:selected("recipeCategory").trim(),sellingPrice:old?Number(previous&&previous.sellingPrice||0):Number(selected("recipePrice")||0),wastagePercent:Number(selected("recipeWastagePercent")||0),status:selected("recipeStatus")||"ACTIVE",costPerServing:foodCostFromRows};
   const existing=menuByProduct(product); if(!old&&existing)return alert("This product already exists.");
   const recipe={};
   document.querySelectorAll(".recipe-editor-row").forEach(row=>{const name=row.querySelector(".ri-name").value.trim(); if(!name)return; const amt=Number(row.querySelector(".ri-amount").value||0); const rawId=row.querySelector(".ri-raw").value; const factor=Number(row.querySelector(".ri-factor").value||1); const note=row.querySelector(".ri-note").value.trim(); recipe[name]=amt; db.ingredientMap[name]={productId:rawId,factor,unit:rawById(rawId)?.uom||"",note};});
-  if(old){db.menu=db.menu.map(m=>m.product===old?item:m); if(old!==product){db.sales.forEach(s=>{if(s.product===old)s.product=product}); db.projectionQty[product]=db.projectionQty[old]||0; delete db.projectionQty[old]; delete db.recipes[old];}}
+  if(old){db.menu=db.menu.map(m=>m.product===old?item:m); if(old!==product){db.sales.forEach(s=>{if(s.product===old)s.product=product}); db.projectionQty[product]=db.projectionQty[old]||0; delete db.projectionQty[old]; delete db.recipes[old]; (db.priceCostHistory||[]).forEach(function(row){if(row.type==="SELLING_PRICE"&&row.itemKey===old)row.itemKey=product;});}}
   else db.menu.push(item);
   db.recipes[product]=recipe;
   closeModal(); renderAll();
@@ -6199,12 +6273,12 @@ function resetStaffProductDropdowns(){
 function updateStaffInProductInfo(){
   const p=rawById(selected("staffInProduct"));
   document.getElementById("staffInUom").value=p?.uom||"";
-  document.getElementById("staffInPrice").value=p?Number(p.costPerUnit||0):"";
+  document.getElementById("staffInPrice").value=p?rawCostAt(p,today()):"";
 }
 function updateStaffOutProductInfo(){
   const p=rawById(selected("staffOutProduct"));
   document.getElementById("staffOutUom").value=p?.uom||"";
-  document.getElementById("staffOutPrice").value=p?Number(p.costPerUnit||0):"";
+  document.getElementById("staffOutPrice").value=p?rawCostAt(p,today()):"";
 }
 function toggleStaffOutProof(){
   const label=document.getElementById("staffOutProofLabel");
@@ -6462,6 +6536,94 @@ function renderSettings(){
   renderCountItemSettingsPreview();
   renderUserPermissionChecklist();
   renderUserAccountList();
+  renderDangerDeletePasswordStatus();
+  renderPriceCostSettings();
+}
+
+function rtDangerDeletePasswordConfigured(){
+  return !!(db&&db.settings&&db.settings.dangerDeletePasswordHash&&db.settings.dangerDeletePasswordSalt);
+}
+
+function renderDangerDeletePasswordStatus(){
+  var configured=rtDangerDeletePasswordConfigured();
+  var settingsStatus=document.getElementById("dangerPasswordStatus");
+  var backupStatus=document.getElementById("dangerDeletePasswordState");
+  var clearButton=document.getElementById("clearAllBusinessDataButton");
+  var message=configured
+    ? "Protected: a separate Boss-only deletion password is set. The password itself is never displayed or saved as readable text."
+    : "Not protected: set a separate deletion password here before business data can be cleared.";
+  if(settingsStatus)settingsStatus.textContent=message;
+  if(backupStatus)backupStatus.textContent=configured
+    ? "Protected by the separate Boss-only deletion password."
+    : "Deletion is locked. Set the deletion password in Settings → Danger Zone Protection first.";
+  if(clearButton){
+    clearButton.disabled=!configured;
+    clearButton.title=configured?"Boss deletion password required":"Set a deletion password in Settings first";
+  }
+}
+
+function rtDangerDeletePasswordStrong(value){
+  return /^(?=.*[A-Za-z])(?=.*\d)\S{8,72}$/.test(String(value||""));
+}
+
+async function rtDeriveDangerDeletePassword(password,saltB64,iterations){
+  if(!window.crypto||!crypto.subtle)throw new Error("Secure password protection is unavailable in this browser.");
+  var material=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);
+  var bits=await crypto.subtle.deriveBits({
+    name:"PBKDF2",
+    salt:rtB64ToBytes(saltB64),
+    iterations:Number(iterations||210000),
+    hash:"SHA-256"
+  },material,256);
+  return rtBytesToB64(new Uint8Array(bits));
+}
+
+async function rtVerifyDangerDeletePassword(password){
+  if(!rtDangerDeletePasswordConfigured())return false;
+  var candidate=await rtDeriveDangerDeletePassword(
+    password,
+    db.settings.dangerDeletePasswordSalt,
+    db.settings.dangerDeletePasswordIterations
+  );
+  var expected=String(db.settings.dangerDeletePasswordHash||"");
+  if(candidate.length!==expected.length)return false;
+  var diff=0;
+  for(var i=0;i<candidate.length;i++)diff|=candidate.charCodeAt(i)^expected.charCodeAt(i);
+  return diff===0;
+}
+
+async function saveDangerDeletePassword(){
+  if(!currentSession||currentSession.role!=="boss"||!userCanAccess("settings"))return alert("Boss Settings permission required.");
+  var bossPin=selected("dangerCurrentBossPin");
+  var password=selected("dangerNewPassword");
+  var confirmation=selected("dangerConfirmPassword");
+  if(!bossPin)return alert("Enter your current Boss PIN first.");
+  var bossAccount=rtCurrentAccount();
+  var bossVerified=false;
+  try{bossVerified=await rtVerifyPassword(bossAccount,bossPin);}catch(error){return alert(error.message||String(error));}
+  if(!bossVerified)return alert("Wrong current Boss PIN. The deletion password was not changed.");
+  if(!rtDangerDeletePasswordStrong(password))return alert("Deletion password must contain 8–72 characters, including at least one letter and one number, with no spaces.");
+  if(password===bossPin)return alert("The deletion password must be different from the Boss login PIN.");
+  if(password!==confirmation)return alert("Deletion-password confirmation does not match.");
+
+  var salt=new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  var saltB64=rtBytesToB64(salt);
+  var iterations=210000;
+  var hash;
+  try{hash=await rtDeriveDangerDeletePassword(password,saltB64,iterations);}catch(error){return alert(error.message||String(error));}
+
+  db.settings.dangerDeletePasswordSalt=saltB64;
+  db.settings.dangerDeletePasswordHash=hash;
+  db.settings.dangerDeletePasswordIterations=iterations;
+  db.settings.dangerDeletePasswordUpdatedAt=new Date().toISOString();
+  db.settings.dangerDeletePasswordUpdatedBy=currentSession.name||currentSession.username||"Boss";
+  logActivity("DANGER_PASSWORD_UPDATE","Settings","Boss set or changed the Danger Zone deletion password");
+  saveDb();
+  ["dangerCurrentBossPin","dangerNewPassword","dangerConfirmPassword"].forEach(function(id){var el=document.getElementById(id);if(el)el.value="";});
+  renderDangerDeletePasswordStatus();
+  alert("Deletion password saved securely. It will now be required before Clear All Business Data can run.");
+  return true;
 }
 
 function renderCountItemSettingsPreview(){
@@ -7096,6 +7258,36 @@ function importBackup(event){
 async function clearAllData(){
   if(!currentSession||currentSession.role!=="boss"||!userCanAccess("backup"))return alert("Boss Backup permission required.");
 
+  if(!rtDangerDeletePasswordConfigured()){
+    alert("Deletion is locked. First go to Settings → Danger Zone Protection and set a separate deletion password.");
+    return false;
+  }
+
+  var guardKey="alpacco_danger_delete_guard_v1";
+  var guard={};
+  try{guard=JSON.parse(sessionStorage.getItem(guardKey)||"{}");}catch(error){guard={};}
+  if(Number(guard.lockedUntil||0)>Date.now()){
+    var minutes=Math.ceil((Number(guard.lockedUntil)-Date.now())/60000);
+    alert("Danger Zone is temporarily locked after repeated wrong passwords. Try again in "+minutes+" minute(s).");
+    return false;
+  }
+
+  var deletionPassword=prompt("Enter the separate Boss-only Danger Zone deletion password.");
+  if(deletionPassword===null)return alert("Delete cancelled. Nothing was changed."),false;
+  var passwordOk=false;
+  try{passwordOk=await rtVerifyDangerDeletePassword(deletionPassword);}catch(error){alert(error.message||String(error));return false;}
+  deletionPassword="";
+  if(!passwordOk){
+    var now=Date.now();
+    if(!guard.windowStart||now-Number(guard.windowStart)>15*60*1000)guard={fails:0,windowStart:now};
+    guard.fails=Number(guard.fails||0)+1;
+    if(guard.fails>=5)guard.lockedUntil=now+15*60*1000;
+    try{sessionStorage.setItem(guardKey,JSON.stringify(guard));}catch(error){}
+    alert(guard.lockedUntil?"Wrong deletion password. Danger Zone is locked for 15 minutes.":"Wrong deletion password. Nothing was deleted.");
+    return false;
+  }
+  try{sessionStorage.removeItem(guardKey);}catch(error){}
+
   var teamWide=teamSyncConfigured();
   var scopeMessage=teamWide
     ? "Because Team Sync is connected, this deletion will sync to every connected team device."
@@ -7376,7 +7568,7 @@ var RT_BASE_SAVE_STAFF_IN=saveStaffStockIn;
 saveStaffStockIn=async function(){
   var p=rawById(selected("staffInProduct"));
   var price=document.getElementById("staffInPrice");
-  if(p&&price)price.value=Number(p.costPerUnit||0);
+  if(p&&price)price.value=rawCostAt(p,today());
   return RT_BASE_SAVE_STAFF_IN.apply(this,arguments);
 };
 
@@ -7386,7 +7578,7 @@ saveStaffStockOut=async function(){
   var q=Number(selected("staffOutQty")||0);
   if(p&&q>stockStats(p.id).balance+0.000001)return alert("Blocked: this stock-out would make "+p.name+" negative. Current balance is "+qty(stockStats(p.id).balance)+" "+(p.uom||"")+".");
   var price=document.getElementById("staffOutPrice");
-  if(p&&price)price.value=Number(p.costPerUnit||0);
+  if(p&&price)price.value=rawCostAt(p,today());
   return RT_BASE_SAVE_STAFF_OUT.apply(this,arguments);
 };
 
@@ -7983,6 +8175,7 @@ function rtProtect(name,permission,bossOnly){
   ["updateProjectionQty","projection",false],["updateIngredientMap","projection",false],["loadProjectionFromMonth","projection",false],["loadProjectionAverage","projection",false],["clearProjection","projection",false],
   ["openRecipeModal","recipes",false],["saveRecipeModal","recipes",false],["deleteRecipeProduct","recipes",false],
   ["saveSystemSettings","settings",true],["clearOldActivityLogs","activitylog",true],
+  ["saveDangerDeletePassword","settings",true],
   ["exportBackup","backup",false],["importBackup","backup",true],["clearAllData","backup",true]
 ].forEach(function(item){rtProtect(item[0],item[1],item[2]);});
 
@@ -8023,6 +8216,7 @@ window.editUserAccount=editUserAccount;
 window.deleteUserAccount=deleteUserAccount;
 window.saveUserAccount=saveUserAccount;
 window.resetUserAccountForm=resetUserAccountForm;
+window.saveDangerDeletePassword=saveDangerDeletePassword;
 window.renderUserPermissionChecklist=renderUserPermissionChecklist;
 window.onUserRoleChange=onUserRoleChange;
 window.toggleAllPermission=toggleAllPermission;
@@ -8046,6 +8240,178 @@ function syncLoginOverlay(){
     document.body.classList.add("locked");
   }
 }
+
+/* =========================================================
+   EFFECTIVE-DATED SELLING PRICE + RAW COST HISTORY
+   Monthly SALES_IN records use the value effective on the
+   first day of that month. Earlier months never get rewritten.
+   ========================================================= */
+function pcMonthDate(month,year){
+  var index=Math.max(0,MONTHS.indexOf(String(month||"")));
+  return String(Number(year||new Date().getFullYear())).padStart(4,"0")+"-"+String(index+1).padStart(2,"0")+"-01";
+}
+function pcHistory(type,itemKey,extraEvent){
+  var rows=(db.priceCostHistory||[]).filter(function(row){return row.type===type&&String(row.itemKey)===String(itemKey);}).slice();
+  if(extraEvent&&extraEvent.type===type&&String(extraEvent.itemKey)===String(itemKey))rows.push(extraEvent);
+  return rows.sort(function(a,b){
+    var byDate=String(a.effectiveFrom).localeCompare(String(b.effectiveFrom));
+    if(byDate)return byDate;
+    return String(a.createdAt||"").localeCompare(String(b.createdAt||""));
+  });
+}
+function pcValueAt(type,itemKey,date,fallback,extraEvent){
+  var value=Number(fallback||0);
+  pcHistory(type,itemKey,extraEvent).forEach(function(row){if(String(row.effectiveFrom)<=String(date||today()))value=Number(row.value||0);});
+  return value;
+}
+function rawCostAt(rawOrId,date,extraEvent){
+  var raw=typeof rawOrId==="object"?rawOrId:rawById(rawOrId);
+  if(!raw)return 0;
+  return pcValueAt("RAW_COST",raw.id,date||today(),raw.costPerUnit,extraEvent);
+}
+function sellingPriceAt(menuOrProduct,date,extraEvent){
+  var menu=typeof menuOrProduct==="object"?menuOrProduct:menuByProduct(menuOrProduct);
+  if(!menu)return 0;
+  return pcValueAt("SELLING_PRICE",menu.product,date||today(),menu.sellingPrice,extraEvent);
+}
+function recipeFoodCost(product,date,extraEvent){
+  var recipe=db.recipes[product]||{};
+  var cost=0,linked=false;
+  Object.entries(recipe).forEach(function(entry){
+    var ingredient=entry[0],amount=entry[1],map=db.ingredientMap[ingredient]||{},raw=rawById(map.productId);
+    if(raw){linked=true;cost+=Number(amount||0)*Number(map.factor||1)*rawCostAt(raw,date||today(),extraEvent);}
+  });
+  return linked?cost:Number(menuByProduct(product)&&menuByProduct(product).costPerServing||0);
+}
+function recipeWastageCost(product,date,extraEvent){return recipeFoodCost(product,date,extraEvent)*recipeWastagePercent(product)/100;}
+function recipeCost(product,date,extraEvent){return recipeFoodCost(product,date,extraEvent)+recipeWastageCost(product,date,extraEvent);}
+function recipeBreakdown(product,date,extraEvent){
+  var food=recipeFoodCost(product,date||today(),extraEvent),wp=recipeWastagePercent(product),waste=food*wp/100;
+  return {food:food,wastagePercent:wp,waste:waste,total:food+waste};
+}
+function salesForMonth(month,year){
+  var date=pcMonthDate(month,year),result={qtyTotal:0,sales:0,cost:0,gross:0,discount:0};
+  db.menu.forEach(function(menu){
+    var record=getSalesRec(menu.product,month,year,false),units=Number(record&&record.qty||0),adjustment=Number(record&&record.adjustment||0);
+    result.qtyTotal+=units;result.discount+=adjustment;
+    result.sales+=units*sellingPriceAt(menu,date)+adjustment;
+    result.cost+=units*recipeCost(menu.product,date);
+  });
+  result.gross=result.sales-result.cost;
+  return result;
+}
+function productPerformanceRows(month,year,limit){
+  var date=pcMonthDate(month,year);
+  return db.menu.map(function(menu){
+    var record=getSalesRec(menu.product,month,year,false),units=Number(record&&record.qty||0),adjustment=Number(record&&record.adjustment||0);
+    var revenue=units*sellingPriceAt(menu,date)+adjustment,cost=units*recipeCost(menu.product,date),gp=revenue-cost;
+    return {product:menu.product,category:menu.category||"-",qty:units,revenue:revenue,cost:cost,gp:gp,margin:revenue?gp/revenue*100:0,status:menu.status||"ACTIVE"};
+  }).filter(function(row){return row.qty||row.revenue;}).sort(function(a,b){return b.revenue-a.revenue;}).slice(0,limit||8);
+}
+function getForecastProductData(){
+  var date=today();
+  return filteredMenuByStatus("projectionProductStatus").map(function(menu){
+    var units=Number((db.projectionQty||{})[menu.product]||0),price=sellingPriceAt(menu,date),unitCost=recipeCost(menu.product,date),revenue=units*price,cost=units*unitCost,gp=revenue-cost;
+    return {product:menu.product,category:menu.category||"-",qty:units,price:price,costPerUnit:unitCost,revenue:revenue,cost:cost,gp:gp,margin:revenue?gp/revenue*100:0,status:menu.status||"ACTIVE"};
+  }).filter(function(row){return row.qty>0;}).sort(function(a,b){return b.revenue-a.revenue;});
+}
+function projectionMaterialTotals(qtyMap){
+  var date=today(),materialTotals={},totals={qty:0,sales:0,cost:0,gp:0};
+  db.menu.forEach(function(menu){
+    var units=Number(qtyMap[menu.product]||0),unitCost=recipeCost(menu.product,date);
+    totals.qty+=units;totals.sales+=units*sellingPriceAt(menu,date);totals.cost+=units*unitCost;
+    Object.entries(db.recipes[menu.product]||{}).forEach(function(entry){materialTotals[entry[0]]=(materialTotals[entry[0]]||0)+units*Number(entry[1]||0);});
+  });
+  totals.gp=totals.sales-totals.cost;
+  return {materialTotals:materialTotals,totals:totals};
+}
+function salesEntryRow(menu,month,year){
+  var date=pcMonthDate(month,year),record=getSalesRec(menu.product,month,year),breakdown=recipeBreakdown(menu.product,date),unitCost=breakdown.total;
+  var units=Number(record.qty||0),adjustment=Number(record.adjustment||0),price=sellingPriceAt(menu,date),sales=units*price+adjustment,gp=sales-units*unitCost,margin=sales?gp/sales*100:0,status=menuStatus(menu);
+  return `<div class="sales-row">
+    <div><strong>${esc(menu.product)}</strong><div class="small">${esc(menu.category||"-")} • <span class="status ${status==="ACTIVE"?"ok":"deactive"}">${status}</span></div></div>
+    <div><input class="input-mini right" type="number" min="0" step="1" value="${units}" onchange="updateSales('${jsq(menu.product)}','qty',this.value)"></div>
+    <div><input class="input-mini right" type="number" step="0.01" value="${adjustment}" onchange="updateSales('${jsq(menu.product)}','adjustment',this.value)"></div>
+    <div class="right">${money(price)}<div class="small">Effective ${esc(date)}</div></div>
+    <div class="right">${money(unitCost)}<div class="small">Food ${money(breakdown.food)} + Wastage ${money(breakdown.waste)}</div></div>
+    <div class="right"><strong>${money(sales)}</strong></div>
+    <div class="right ${gp>=0?'green-text':'red-text'}">${money(gp)}</div>
+    <div class="right ${margin>=0?'green-text':'red-text'}">${pct(margin)}</div>
+  </div>`;
+}
+function pcImpact(type,itemKey,startDate,newValue){
+  var candidate={id:"PREVIEW",type:type,itemKey:itemKey,effectiveFrom:startDate,value:Number(newValue),createdAt:"9999-12-31T23:59:59Z"};
+  var affectedUnits=0,affectedProducts={},affectedMonths={},revenueBefore=0,revenueAfter=0,costBefore=0,costAfter=0;
+  (db.sales||[]).forEach(function(record){
+    var monthDate=pcMonthDate(record.month,record.year),units=Number(record.qty||0),menu=menuByProduct(record.product);
+    if(!menu||!units||monthDate<startDate)return;
+    var beforeRevenue=units*sellingPriceAt(menu,monthDate),afterRevenue=units*sellingPriceAt(menu,monthDate,candidate);
+    var beforeCost=units*recipeCost(menu.product,monthDate),afterCost=units*recipeCost(menu.product,monthDate,candidate);
+    var isAffected=type==="SELLING_PRICE"?menu.product===itemKey:Math.abs(afterCost-beforeCost)>0.0000001;
+    if(!isAffected)return;
+    affectedUnits+=units;affectedProducts[menu.product]=true;affectedMonths[record.month+" "+record.year]=true;
+    revenueBefore+=beforeRevenue;revenueAfter+=afterRevenue;costBefore+=beforeCost;costAfter+=afterCost;
+  });
+  var gpBefore=revenueBefore-costBefore,gpAfter=revenueAfter-costAfter;
+  return {units:affectedUnits,products:Object.keys(affectedProducts).length,months:Object.keys(affectedMonths).length,revenueDelta:revenueAfter-revenueBefore,costDelta:costAfter-costBefore,gpDelta:gpAfter-gpBefore,marginBefore:revenueBefore?gpBefore/revenueBefore*100:0,marginAfter:revenueAfter?gpAfter/revenueAfter*100:0};
+}
+function renderPriceCostItemOptions(){
+  var type=selected("priceCostType")||"SELLING_PRICE",select=document.getElementById("priceCostItem");if(!select)return;
+  var current=select.value,rows=type==="SELLING_PRICE"?db.menu.map(function(menu){return {key:menu.product,label:menu.product};}):db.rawMaterials.map(function(raw){return {key:raw.id,label:raw.id+" — "+raw.name};});
+  select.innerHTML='<option value="">Select...</option>'+rows.sort(function(a,b){return a.label.localeCompare(b.label);}).map(function(row){return '<option value="'+esc(row.key)+'" '+(row.key===current?'selected':'')+'>'+esc(row.label)+'</option>';}).join("");
+  if(!select.value&&rows.length)select.value=rows[0].key;
+  previewPriceCostImpact();
+}
+function previewPriceCostImpact(){
+  var type=selected("priceCostType")||"SELLING_PRICE",itemKey=selected("priceCostItem"),date=selected("priceCostStartDate")||today(),newValue=Number(selected("priceCostNewValue")||0);
+  var item=type==="SELLING_PRICE"?menuByProduct(itemKey):rawById(itemKey),current=item?(type==="SELLING_PRICE"?sellingPriceAt(item,date):rawCostAt(item,date)):0;
+  setHtml("priceCostCurrent",item?`Selected: <b>${esc(type==="SELLING_PRICE"?item.product:item.id+" — "+item.name)}</b> • Value effective on ${esc(date)}: <b>${money(current)}</b>`:"Select a product or raw material.");
+  if(!item||!Number.isFinite(newValue)||newValue<0){setHtml("priceCostImpact","");return;}
+  var impact=pcImpact(type,itemKey,date,newValue),marginDelta=impact.marginAfter-impact.marginBefore;
+  setHtml("priceCostImpact",[
+    ["Recorded units affected",qty(impact.units)],
+    ["Sales revenue change",(impact.revenueDelta>=0?"+":"")+money(impact.revenueDelta)],
+    ["Raw cost change",(impact.costDelta>=0?"+":"")+money(impact.costDelta)],
+    ["Gross profit change",(impact.gpDelta>=0?"+":"")+money(impact.gpDelta)],
+    ["Margin change",(marginDelta>=0?"+":"")+pct(marginDelta)]
+  ].map(function(row){return '<div class="impact-box"><div class="impact-label">'+esc(row[0])+'</div><div class="impact-value">'+esc(row[1])+'</div></div>';}).join(""));
+}
+function renderPriceCostHistory(){
+  setHtml("priceCostHistory",(db.priceCostHistory||[]).slice().sort(function(a,b){return String(b.effectiveFrom).localeCompare(String(a.effectiveFrom))||String(b.createdAt).localeCompare(String(a.createdAt));}).map(function(row){
+    var item=row.type==="SELLING_PRICE"?menuByProduct(row.itemKey):rawById(row.itemKey),label=item?(row.type==="SELLING_PRICE"?item.product:item.id+" — "+item.name):row.itemKey;
+    return `<div class="price-history-row"><div class="history-type">${row.type==="SELLING_PRICE"?"Selling Price":"Raw Cost"}</div><div><b>${esc(label)}</b><div class="small">${esc(row.createdBy||"Boss")}</div></div><div><b>${esc(row.effectiveFrom)}</b></div><div><b>${money(row.value)}</b></div><div>${esc(row.note||"-")}</div><button type="button" class="btn-red" onclick="removePriceCostChange('${jsq(row.id)}')">Remove</button></div>`;
+  }).join("")||'<div class="small">No effective-dated changes saved yet.</div>');
+}
+function renderPriceCostSettings(){
+  var date=document.getElementById("priceCostStartDate");if(!date)return;
+  if(!date.value)date.value=today().slice(0,8)+"01";
+  renderPriceCostItemOptions();renderPriceCostHistory();
+}
+function savePriceCostChange(){
+  if(!currentSession||currentSession.role!=="boss"||!userCanAccess("settings"))return alert("Boss Settings permission required.");
+  var type=selected("priceCostType"),itemKey=selected("priceCostItem"),date=selected("priceCostStartDate"),valueText=selected("priceCostNewValue"),value=Number(valueText),note=selected("priceCostNote").trim();
+  if(!itemKey)return alert("Select a product or raw material.");
+  if(!/^\d{4}-\d{2}-01$/.test(date))return alert("Choose the first day of a month. SALES_IN is monthly, so the effective date must end in 01.");
+  if(valueText===""||!Number.isFinite(value)||value<0)return alert("Enter a valid new value of zero or more.");
+  if(note.length<3)return alert("Enter a short reason for this change.");
+  var existing=(db.priceCostHistory||[]).find(function(row){return row.type===type&&row.itemKey===itemKey&&row.effectiveFrom===date;});
+  if(existing&&!confirm("A change already exists for this item and month. Replace it?"))return;
+  if(existing)db.priceCostHistory=db.priceCostHistory.filter(function(row){return row.id!==existing.id;});
+  db.priceCostHistory.push({id:uid("PCH"),type:type,itemKey:itemKey,effectiveFrom:date,value:value,note:note,createdAt:nowIso(),createdBy:currentSession.name||currentSession.username||"Boss"});
+  logActivity("PRICE_COST_EFFECTIVE_CHANGE","Settings",(type==="SELLING_PRICE"?"Selling price":"Raw cost")+" for "+itemKey+" set to "+value+" from "+date);
+  saveDb();renderAll();alert("Effective-dated change saved. Earlier sales months remain unchanged.");
+}
+function removePriceCostChange(id){
+  if(!currentSession||currentSession.role!=="boss"||!userCanAccess("settings"))return alert("Boss Settings permission required.");
+  var row=(db.priceCostHistory||[]).find(function(item){return item.id===id;});if(!row)return;
+  if(!confirm("Remove this effective-dated change? Reports will recalculate using the previous value."))return;
+  db.priceCostHistory=db.priceCostHistory.filter(function(item){return item.id!==id;});
+  logActivity("PRICE_COST_CHANGE_REMOVE","Settings","Removed "+row.type+" change for "+row.itemKey+" from "+row.effectiveFrom);saveDb();renderAll();
+}
+window.renderPriceCostItemOptions=renderPriceCostItemOptions;
+window.previewPriceCostImpact=previewPriceCostImpact;
+window.savePriceCostChange=savePriceCostChange;
+window.removePriceCostChange=removePriceCostChange;
 
 initControls();
 renderAll();

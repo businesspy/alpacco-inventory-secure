@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ALPACCO PROFESSIONAL UI + TEAM SYNC PERMISSION FIX — 2026-07-21 -->
+<!-- ALPACCO PROFESSIONAL UI + TEAM SYNC + FULL BUSINESS RESET — 2026-07-21 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -3065,6 +3065,37 @@ tr:hover td{
   border-radius:11px!important;
 }
 
+.danger-zone-card{
+  border-color:#ebcbd1!important;
+  background:linear-gradient(180deg,#fff 0,#fffafa 100%)!important;
+}
+
+.danger-zone-card h2{
+  color:#9d2639!important;
+}
+
+.danger-delete-list{
+  margin:12px 0!important;
+  padding:11px 12px 11px 30px!important;
+  color:#5f464b!important;
+  background:#fff5f6!important;
+  border:1px solid #f0d5da!important;
+  border-radius:11px!important;
+  font-size:12px!important;
+  line-height:1.6!important;
+}
+
+.danger-keep-note{
+  margin:0 0 12px!important;
+  padding:10px 12px!important;
+  color:#365f4b!important;
+  background:#f1f8f4!important;
+  border:1px solid #d4e8dc!important;
+  border-radius:10px!important;
+  font-size:11.5px!important;
+  line-height:1.45!important;
+}
+
 /* Health, statuses, and modal */
 .rt-health-card{
   overflow:hidden!important;
@@ -4210,10 +4241,17 @@ tr:hover td{
           <button class="btn-light" onclick="window.print()">Print Report</button>
         </div>
       </div>
-      <div class="card">
+      <div class="card danger-zone-card">
         <h2>Danger Zone</h2>
-        <p class="small">This deletes all local data from this browser only.</p>
-        <button class="btn-red" onclick="clearAllData()">Clear All Data</button>
+        <p class="small">Permanently clears all operational business records. When Team Sync is connected, the cleared database is sent to every connected device.</p>
+        <ul class="danger-delete-list">
+          <li>RAW_LIST and recipes/products</li>
+          <li>IN_STOCK, OUT_STOCK, stock counts, and wastage</li>
+          <li>SALES_IN, expenses, projections, and sales uploads</li>
+          <li>Activity logs and uploaded proof images</li>
+        </ul>
+        <div class="danger-keep-note"><b>Kept:</b> Boss/Staff accounts, PINs, permissions, system settings, and Team Sync connection.</div>
+        <button class="btn-red" onclick="clearAllData()">Clear All Business Data</button>
       </div>
     </div>
   </section>
@@ -7055,17 +7093,76 @@ function importBackup(event){
   reader.readAsText(file);
 }
 
-function clearAllData(){
+async function clearAllData(){
   if(!currentSession||currentSession.role!=="boss"||!userCanAccess("backup"))return alert("Boss Backup permission required.");
-  var phrase=prompt("This clears operational inventory, sales, expenses and logs but keeps user accounts.\n\nType DELETE ALL INVENTORY to continue.");
-  if(phrase!=="DELETE ALL INVENTORY")return alert("Delete cancelled.");
-  exportBackup("pre-delete-safety-backup");
+
+  var teamWide=teamSyncConfigured();
+  var scopeMessage=teamWide
+    ? "Because Team Sync is connected, this deletion will sync to every connected team device."
+    : "Team Sync is not connected, so this deletion will affect this browser only.";
+  var phrase=prompt(
+    "DANGER — PERMANENT BUSINESS DATA RESET\n\n"+
+    "This deletes:\n"+
+    "• RAW_LIST and recipes/products\n"+
+    "• IN_STOCK, OUT_STOCK, stock counts and wastage\n"+
+    "• SALES_IN, expenses, projections and sales uploads\n"+
+    "• Activity logs and uploaded proof images\n\n"+
+    "Boss/Staff accounts, PINs, permissions and system settings are kept.\n\n"+
+    scopeMessage+"\n\n"+
+    "Type DELETE ALL BUSINESS DATA to continue."
+  );
+  if(phrase!=="DELETE ALL BUSINESS DATA")return alert("Delete cancelled. Nothing was changed.");
+
+  exportBackup("pre-delete-all-business-data-backup");
+
   var settings=clone(db.settings||{});
-  db=normalizeDb({meta:{schemaVersion:"10.0"},rawMaterials:[],stockIn:[],stockOut:[],menu:[],expenses:[],sales:[],recipes:{},ingredientMap:{},salesUploads:[],salesDifferences:[],projectionQty:{},stockCounts:[],activityLogs:[],settings:settings});
+  settings.stockCountItemIds=[];
+  settings.stockCountMode="SELECTED";
+
+  db=normalizeDb({
+    meta:{
+      schemaVersion:"10.0",
+      operationalDataClearedAt:new Date().toISOString(),
+      operationalDataClearedBy:currentSession.name||currentSession.username||"Boss"
+    },
+    rawMaterials:[],
+    stockIn:[],
+    stockOut:[],
+    stockCounts:[],
+    menu:[],
+    recipes:{},
+    ingredientMap:{},
+    sales:[],
+    salesUploads:[],
+    salesDifferences:[],
+    expenses:[],
+    projectionQty:{},
+    activityLogs:[],
+    settings:settings
+  });
+
   RT_LAST_SAVED_SNAPSHOT="";
-  saveDb();
+  var localSaved=saveDb();
   renderAll();
-  alert("Operational data cleared. User accounts and system settings were kept.");
+
+  if(!localSaved){
+    alert("The reset could not be saved in this browser. Downloaded safety backup was kept. Do not close this page.");
+    return false;
+  }
+
+  if(teamWide){
+    if(CLOUD_SAVE_TIMER){clearTimeout(CLOUD_SAVE_TIMER);CLOUD_SAVE_TIMER=null;}
+    var synced=await cloudPushData(false);
+    if(!synced){
+      alert("Business data was cleared in this browser, but Team Sync failed. Keep the downloaded safety backup and use Upload This Browser Data to Supabase before another device makes changes.");
+      return false;
+    }
+    alert("All business data was cleared successfully and synced to the team. User accounts and settings were kept.");
+    return true;
+  }
+
+  alert("All business data was cleared from this browser. User accounts and settings were kept. Team Sync was not connected.");
+  return true;
 }
 
 function deleteTxn(id,direction){

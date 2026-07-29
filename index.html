@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ALPACCO PROFESSIONAL UI + TEAM SYNC + BOSS-ONLY DANGER PASSWORD + EFFECTIVE-DATED PRICE/COST — 2026-07-22 -->
+<!-- ALPACCO PROFESSIONAL UI + BOSS-MANAGED CATEGORY/PAYMENT DROPDOWNS — 2026-07-29 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -1430,6 +1430,12 @@ h3{
 .price-cost-warning{margin-top:10px;background:#fff4df;border-left:4px solid #ef9d32;border-radius:10px;padding:10px;color:#7c3b12}
 @media(max-width:1100px){.price-cost-form{grid-template-columns:1fr 1fr}.price-cost-impact{grid-template-columns:1fr 1fr}.price-history-row{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.price-cost-form,.price-cost-impact,.price-history-row{grid-template-columns:1fr}}
+
+/* Boss-managed dropdown choices */
+.dropdown-choice-panel{grid-column:1/-1}
+.dropdown-choice-panel textarea{min-height:180px;line-height:1.55}
+.dropdown-choice-panel .choice-help{margin-top:6px}
+.dropdown-choice-panel .form-row{align-items:start}
 
 .settings-panel{
   background:#fffdfb;
@@ -4229,6 +4235,23 @@ tr:hover td{
           <div class="small">These settings are saved in this browser with your local inventory data.</div>
         </div>
 
+        <div class="settings-panel dropdown-choice-panel">
+          <h3>Category &amp; Payment Method Dropdown Choices</h3>
+          <div class="small">Boss only. These choices control the dropdown lists in Add / Edit Raw Material. Enter one choice per line, then click <b>Save Settings</b>.</div>
+          <div class="form-row" style="margin-top:12px">
+            <div class="field">
+              <label>Category Choices</label>
+              <textarea id="settingRawCategoryChoices" spellcheck="false" placeholder="Ingredient&#10;Packaging&#10;Other"></textarea>
+              <div class="small choice-help">Blank lines and duplicate choices are removed automatically.</div>
+            </div>
+            <div class="field">
+              <label>Payment Method Choices</label>
+              <textarea id="settingRawPaymentChoices" spellcheck="false" placeholder="Cash&#10;Bank Transfer&#10;Credit Card&#10;E-Wallet"></textarea>
+              <div class="small choice-help">Removing a choice does not erase it from old records. It only stops it being selected for new records.</div>
+            </div>
+          </div>
+        </div>
+
         <div class="settings-panel price-cost-panel">
           <h3>Price &amp; Raw Cost Effective Dates</h3>
           <div class="small">Boss only. Schedule a selling-price or raw-material-cost change without rewriting earlier sales months.</div>
@@ -4422,6 +4445,25 @@ function normalizeDb(d){
   d.settings.stockCountItemIds=d.settings.stockCountItemIds||[];
   d.settings.requireWastageProof=d.settings.requireWastageProof!==false;
   d.settings.allowStaffEdit=d.settings.allowStaffEdit===true;
+
+  /* Boss-managed dropdown choices. Existing data is used during the first migration. */
+  if(!Array.isArray(d.settings.rawCategoryChoices)){
+    d.settings.rawCategoryChoices=cleanDropdownChoices(
+      d.rawMaterials.map(function(item){return item&&item.category;}).concat(["Ingredient","Packaging","Other"])
+    );
+  }else{
+    d.settings.rawCategoryChoices=cleanDropdownChoices(d.settings.rawCategoryChoices);
+  }
+  if(!Array.isArray(d.settings.rawPaymentChoices)){
+    d.settings.rawPaymentChoices=cleanDropdownChoices(
+      d.rawMaterials.map(function(item){return item&&item.paymentMethod;}).concat(["Cash","Bank Transfer","Credit Card","E-Wallet","Credit Terms","Other"])
+    );
+  }else{
+    d.settings.rawPaymentChoices=cleanDropdownChoices(d.settings.rawPaymentChoices);
+  }
+  if(!d.settings.rawCategoryChoices.length)d.settings.rawCategoryChoices=["Ingredient","Packaging","Other"];
+  if(!d.settings.rawPaymentChoices.length)d.settings.rawPaymentChoices=["Cash","Bank Transfer","Credit Card","E-Wallet","Credit Terms","Other"];
+
   d.settings.dangerDeletePasswordHash=String(d.settings.dangerDeletePasswordHash||"");
   d.settings.dangerDeletePasswordSalt=String(d.settings.dangerDeletePasswordSalt||"");
   d.settings.dangerDeletePasswordIterations=Number(d.settings.dangerDeletePasswordIterations||210000);
@@ -4642,6 +4684,39 @@ function menuByProduct(product){return db.menu.find(m=>m.product===product);}
 function monthIndex(m){return MONTHS.indexOf(m);}
 function isMonthYear(date,month,year){if(!date)return false; const d=new Date(date+"T00:00:00"); return MONTHS[d.getMonth()]===month && d.getFullYear()===Number(year);}
 function selected(id){return document.getElementById(id)?.value||"";}
+function cleanDropdownChoices(values){
+  const seen=new Set();
+  const output=[];
+  (Array.isArray(values)?values:[]).forEach(function(value){
+    const label=String(value==null?"":value).trim();
+    if(!label)return;
+    const key=label.toLocaleLowerCase();
+    if(seen.has(key))return;
+    seen.add(key);
+    output.push(label);
+  });
+  return output;
+}
+function parseDropdownChoiceText(value){
+  return cleanDropdownChoices(String(value||"").split(/\r?\n/));
+}
+function rawSettingsDropdownOptions(type,currentValue){
+  const isCategory=type==="category";
+  const choices=cleanDropdownChoices(isCategory?db.settings.rawCategoryChoices:db.settings.rawPaymentChoices);
+  const current=String(currentValue||"").trim();
+  const currentKey=current.toLocaleLowerCase();
+  const exists=current && choices.some(function(choice){return choice.toLocaleLowerCase()===currentKey;});
+  const title=isCategory?"Select Category...":"Select Payment Method...";
+  let html=`<option value="">${title}</option>`;
+  if(current&&!exists){
+    html+=`<option value="${esc(current)}" selected>${esc(current)} — Existing value</option>`;
+  }
+  html+=choices.map(function(choice){
+    const chosen=current && choice.toLocaleLowerCase()===currentKey;
+    return `<option value="${esc(choice)}" ${chosen?"selected":""}>${esc(choice)}</option>`;
+  }).join("");
+  return html;
+}
 function setText(id,v){const el=document.getElementById(id); if(el)el.textContent=v;}
 function setHtml(id,v){const el=document.getElementById(id); if(el)el.innerHTML=v;}
 function allRawOptions(selectedId=""){return `<option value="">-- Not linked --</option>`+db.rawMaterials.slice().sort((a,b)=>a.id.localeCompare(b.id)).map(p=>`<option value="${esc(p.id)}" ${p.id===selectedId?"selected":""}>${esc(p.id)} — ${esc(p.name)} (${esc(p.uom||"-")})</option>`).join("");}
@@ -5017,10 +5092,10 @@ function openRawModal(id=""){
     <div class="note-box">Entry opened at: <b>${localDateTime(modalOpenedAt)}</b>. This time will be saved automatically.</div>
     <input id="rawEditId" type="hidden" value="${esc(id)}">
     <div class="form-row"><div class="field"><label>Person In Charge</label><input id="rawPic" required value="${esc(p.pic||"")}" placeholder="Staff name"></div><div class="field"><label>Products ID</label><input id="rawId" required value="${esc(p.id||"")}" placeholder="Example: B001-RRPROMAX"></div></div>
-    <div class="form-row"><div class="field"><label>Products Name</label><input id="rawName" required value="${esc(p.name||"")}"></div><div class="field"><label>Category</label><input id="rawCategory" value="${esc(p.category||"")}"></div></div>
+    <div class="form-row"><div class="field"><label>Products Name</label><input id="rawName" required value="${esc(p.name||"")}"></div><div class="field"><label>Category</label><select id="rawCategory">${rawSettingsDropdownOptions("category",p.category||"")}</select></div></div>
     <div class="form-row"><div class="field"><label>Original Packaging / Unit Size</label><input id="rawUnitSize" value="${esc(p.unitSize||"")}" placeholder="Example: 1KG / 500G / 1 bottle"></div><div class="field"><label>UOM</label><input id="rawUom" required value="${esc(p.uom||"")}" placeholder="KG, L, UNIT, BOTTLE"></div></div>
     <div class="form-row"><div class="field"><label>Cost Per Unit (RM)</label><input id="rawCost" type="number" step="0.0001" value="${id?rawCostAt(p,today()):Number(p.costPerUnit||0)}" ${id?'readonly title="Use Settings → Price & Raw Cost Effective Dates"':''}><div class="field-help">${id?'Change cost in Settings → Price & Raw Cost Effective Dates so old months stay correct.':'Opening cost for this new raw material.'}</div></div><div class="field"><label>Low Stock Level</label><input id="rawMin" type="number" step="0.01" value="${Number(p.minStock||1)}"></div></div>
-    <div class="form-row"><div class="field"><label>Status</label><select id="rawStatus"><option ${p.status==="ACTIVE"?"selected":""}>ACTIVE</option><option ${p.status==="DEACTIVE"?"selected":""}>DEACTIVE</option></select></div><div class="field"><label>Payment Method</label><input id="rawPayment" value="${esc(p.paymentMethod||"")}"></div></div>
+    <div class="form-row"><div class="field"><label>Status</label><select id="rawStatus"><option ${p.status==="ACTIVE"?"selected":""}>ACTIVE</option><option ${p.status==="DEACTIVE"?"selected":""}>DEACTIVE</option></select></div><div class="field"><label>Payment Method</label><select id="rawPayment">${rawSettingsDropdownOptions("payment",p.paymentMethod||"")}</select></div></div>
     <div class="field"><label>Supplier</label><input id="rawSupplier" value="${esc(p.supplier||"")}"></div>
     <div class="field"><label>Ingredient Image</label><input id="rawImage" type="file" accept="image/*"><div class="small">Leave empty to keep existing image.</div></div>
   `, saveRawModal);
@@ -6524,6 +6599,10 @@ function renderSettings(){
   document.getElementById("settingCountMode").value=db.settings.stockCountMode||"SELECTED";
   document.getElementById("settingRequireProof").value=db.settings.requireWastageProof===false?"NO":"YES";
   document.getElementById("settingStaffEdit").value=db.settings.allowStaffEdit?"YES":"NO";
+  const categoryChoicesField=document.getElementById("settingRawCategoryChoices");
+  const paymentChoicesField=document.getElementById("settingRawPaymentChoices");
+  if(categoryChoicesField)categoryChoicesField.value=(db.settings.rawCategoryChoices||[]).join("\n");
+  if(paymentChoicesField)paymentChoicesField.value=(db.settings.rawPaymentChoices||[]).join("\n");
 
   const selectedIds=db.settings.stockCountItemIds||[];
   const disabled=(db.settings.stockCountMode||"SELECTED")==="ALL";
@@ -6667,7 +6746,11 @@ function clearSelectedCountItems(){
 }
 
 function saveSystemSettings(){
-  if(!currentSession || currentSession.role!=="boss")return alert("Boss login required.");
+  if(!currentSession || currentSession.role!=="boss" || !userCanAccess("settings"))return alert("Boss Settings permission required.");
+  const categoryChoices=parseDropdownChoiceText(selected("settingRawCategoryChoices"));
+  const paymentChoices=parseDropdownChoiceText(selected("settingRawPaymentChoices"));
+  if(!categoryChoices.length)return alert("Add at least one Category choice before saving.");
+  if(!paymentChoices.length)return alert("Add at least one Payment Method choice before saving.");
   if(SUPABASE_AUTH_REQUIRED){
     db.settings.bossPin="__SUPABASE_AUTH__";
     db.settings.staffPin="__SUPABASE_AUTH__";
@@ -6678,12 +6761,14 @@ function saveSystemSettings(){
   db.settings.stockCountMode=selected("settingCountMode")||"SELECTED";
   db.settings.requireWastageProof=selected("settingRequireProof")!=="NO";
   db.settings.allowStaffEdit=selected("settingStaffEdit")==="YES";
+  db.settings.rawCategoryChoices=categoryChoices;
+  db.settings.rawPaymentChoices=paymentChoices;
   if(db.settings.stockCountMode==="ALL"){
     db.settings.stockCountItemIds=db.rawMaterials.filter(p=>(p.status||"ACTIVE")!=="DEACTIVE").map(p=>p.id);
   }else{
     db.settings.stockCountItemIds=[...document.querySelectorAll("#settingCountItems input[type=checkbox]:checked")].map(x=>x.value);
   }
-  logActivity("SETTINGS_UPDATE","Settings",`Boss updated system settings`);
+  logActivity("SETTINGS_UPDATE","Settings",`Boss updated system settings, ${categoryChoices.length} categories and ${paymentChoices.length} payment methods`);
   saveDb();
   resetStaffProductDropdowns();
   renderAll();

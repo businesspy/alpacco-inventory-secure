@@ -3448,6 +3448,88 @@ tr:hover td{
   }
 }
 
+
+
+/* =========================================================
+   V10.1 RAW_LIST BULK UPLOAD
+   CSV / Excel template, validation preview and safe import.
+   ========================================================= */
+.raw-bulk-guide{
+  margin:0 0 12px;
+  padding:10px 12px;
+  border:1px solid #ead6cf;
+  border-left:4px solid var(--green);
+  border-radius:12px;
+  background:#f4fff8;
+  color:#345846;
+  font-size:12px;
+  line-height:1.45;
+}
+.raw-import-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(120px,1fr));
+  gap:9px;
+  margin:12px 0;
+}
+.raw-import-stat{
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff7f3;
+  padding:10px;
+}
+.raw-import-stat span{
+  display:block;
+  color:var(--muted);
+  font-size:10.5px;
+  text-transform:uppercase;
+  font-weight:700;
+}
+.raw-import-stat strong{
+  display:block;
+  margin-top:3px;
+  color:var(--maroon-dark);
+  font-size:18px;
+}
+.raw-import-errors{
+  max-height:190px;
+  overflow:auto;
+  margin:8px 0 12px;
+  padding:10px 12px;
+  border:1px solid #f1b8c1;
+  border-radius:12px;
+  background:#fff1f3;
+  color:#8f1d30;
+  font-size:12px;
+  line-height:1.45;
+}
+.raw-import-preview{
+  max-height:310px;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:12px;
+}
+.raw-import-preview table{min-width:920px;}
+.raw-import-options{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin:12px 0;
+}
+.raw-import-check{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff8f2;
+  font-size:12px;
+}
+.raw-import-check input{width:auto;}
+@media(max-width:760px){
+  .raw-import-summary,.raw-import-options{grid-template-columns:1fr;}
+}
+
 </style>
 </head>
 
@@ -3713,8 +3795,14 @@ tr:hover td{
           <input id="rawSearch" placeholder="Search raw material..." oninput="renderRaw()">
           <select id="rawStatusFilter" onchange="renderRaw()"><option value="">All Status</option><option>ACTIVE</option><option>DEACTIVE</option><option>LOW STOCK</option></select>
           <button class="btn-gold" onclick="openRawModal()">+ Add Raw Material</button>
+          <button class="btn-light" onclick="downloadRawImportTemplate()">Download Import Template</button>
+          <button class="btn-green" onclick="document.getElementById('rawBulkFile').click()">Bulk Upload RAW_LIST</button>
+          <input id="rawBulkFile" class="hidden" type="file" accept=".csv,.xlsx,.xls" onchange="beginRawBulkImport(event)">
           <button class="btn-blue" onclick="exportCsv('raw')">Export CSV</button>
         </div>
+      </div>
+      <div class="raw-bulk-guide">
+        <strong>Bulk upload:</strong> CSV or Excel (.xlsx/.xls). Required columns are <b>Products ID</b>, <b>Products Name</b>, and <b>UOM</b>. Optional <b>Opening Balance</b> creates one opening IN_STOCK record for newly added IDs only.
       </div>
       <div id="rawBody" class="raw-list"></div>
     </div>
@@ -4362,6 +4450,7 @@ tr:hover td{
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const IMPORTED_DATA = {};
 const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
@@ -8497,6 +8586,343 @@ window.renderPriceCostItemOptions=renderPriceCostItemOptions;
 window.previewPriceCostImpact=previewPriceCostImpact;
 window.savePriceCostChange=savePriceCostChange;
 window.removePriceCostChange=removePriceCostChange;
+
+
+
+/* =========================================================
+   V10.1 RAW_LIST BULK UPLOAD
+   - Accepts CSV, XLSX and XLS.
+   - Validates before import.
+   - Matches existing records by Products ID.
+   - Never deletes records missing from the uploaded file.
+   - Opening balance applies to newly created IDs only.
+   ========================================================= */
+var RAW_BULK_IMPORT_PENDING=null;
+
+function rawBulkPermissionOk(){
+  if(!currentSession||!userCanAccess("raw")){
+    alert("RAW_LIST permission is required for bulk upload.");
+    return false;
+  }
+  if(currentSession.role!=="boss"){
+    alert("Only a Boss account can bulk upload RAW_LIST master data.");
+    return false;
+  }
+  return true;
+}
+
+function downloadRawImportTemplate(){
+  if(!rawBulkPermissionOk())return;
+  var headers=[
+    "Products ID","Products Name","Category","Original Packaging / Unit Size","UOM",
+    "Cost Per Unit (RM)","Low Stock Level","Status","Supplier","Payment Method",
+    "Opening Balance","Opening Balance Date","PIC"
+  ];
+  rtDownloadCsv(headers,[],"RAW_LIST-import-template-"+today()+".csv");
+}
+
+function rawImportCell(row,index){
+  return index>=0?String(row[index]==null?"":row[index]).trim():"";
+}
+function rawImportNumber(value){
+  var text=String(value==null?"":value).replace(/RM/gi,"").replace(/,/g,"").trim();
+  if(text==="")return null;
+  if(!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text))return NaN;
+  return Number(text);
+}
+
+function rawImportColumnMap(headers){
+  return {
+    id:findCsvColumn(headers,["Products ID","Product ID","Raw ID","Material ID","SKU","ID"]),
+    name:findCsvColumn(headers,["Products Name","Product Name","Raw Material Name","Material Name","Item Name","Name"]),
+    category:findCsvColumn(headers,["Category","Raw Category","Material Category"]),
+    unitSize:findCsvColumn(headers,["Original Packaging / Unit Size","Unit Size","Packaging Size","Pack Size","Original Packaging"]),
+    uom:findCsvColumn(headers,["UOM","Unit of Measure","Measurement Unit","Unit"]),
+    cost:findCsvColumn(headers,["Cost Per Unit (RM)","Cost Per Unit","Unit Cost","Cost","Price"]),
+    minStock:findCsvColumn(headers,["Low Stock Level","Minimum Stock","Min Stock","Reorder Level","Low Level"]),
+    status:findCsvColumn(headers,["Status","Active Status"]),
+    supplier:findCsvColumn(headers,["Supplier","Vendor"]),
+    payment:findCsvColumn(headers,["Payment Method","Payment","Paid By"]),
+    opening:findCsvColumn(headers,["Opening Balance","Opening Stock","Initial Balance","Initial Stock","Starting Balance"]),
+    openingDate:findCsvColumn(headers,["Opening Balance Date","Opening Date","Initial Stock Date","Starting Date"]),
+    pic:findCsvColumn(headers,["PIC","Person In Charge","Staff","Created By"])
+  };
+}
+
+function rawImportStatus(value){
+  var text=String(value||"ACTIVE").trim().toUpperCase();
+  return /DEACTIVE|INACTIVE|DISABLED|NO/.test(text)?"DEACTIVE":"ACTIVE";
+}
+
+function rawImportMonthStart(){
+  return today().slice(0,8)+"01";
+}
+
+function readRawBulkFile(file){
+  return new Promise(function(resolve,reject){
+    var ext=String(file.name||"").split(".").pop().toLowerCase();
+    var reader=new FileReader();
+    reader.onerror=function(){reject(new Error("The selected file could not be read."));};
+    if(ext==="csv"){
+      reader.onload=function(event){
+        try{resolve(parseCsvText(String(event.target.result||"").replace(/^\uFEFF/,"")));}
+        catch(error){reject(error);}
+      };
+      reader.readAsText(file,"UTF-8");
+      return;
+    }
+    if(ext==="xlsx"||ext==="xls"){
+      if(!window.XLSX){
+        reject(new Error("Excel support could not load. Check internet access or save the file as CSV."));
+        return;
+      }
+      reader.onload=function(event){
+        try{
+          var workbook=XLSX.read(event.target.result,{type:"array",cellDates:false});
+          if(!workbook.SheetNames.length)throw new Error("The workbook has no worksheet.");
+          var sheet=workbook.Sheets[workbook.SheetNames[0]];
+          resolve(XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:false,blankrows:false}));
+        }catch(error){reject(error);}
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+    reject(new Error("Only CSV, XLSX or XLS files are supported."));
+  });
+}
+
+function prepareRawBulkImport(rows,fileName){
+  if(!Array.isArray(rows)||rows.length<2)throw new Error("The file has no raw-material data rows.");
+  var headers=(rows[0]||[]).map(function(value){return String(value==null?"":value).trim();});
+  var map=rawImportColumnMap(headers);
+  var missing=[];
+  if(map.id<0)missing.push("Products ID");
+  if(map.name<0)missing.push("Products Name");
+  if(map.uom<0)missing.push("UOM");
+  if(missing.length)throw new Error("Missing required column(s): "+missing.join(", ")+". Download and use the RAW_LIST import template.");
+
+  var valid=[],errors=[],seen={};
+  for(var i=1;i<rows.length;i++){
+    var source=rows[i]||[];
+    var sourceLine=i+1;
+    var id=rawImportCell(source,map.id).toUpperCase();
+    var name=rawImportCell(source,map.name);
+    var uom=rawImportCell(source,map.uom).toUpperCase();
+    if(!id&&!name&&!uom)continue;
+
+    var rowErrors=[];
+    if(!id)rowErrors.push("Products ID is blank");
+    if(!name)rowErrors.push("Products Name is blank");
+    if(!uom)rowErrors.push("UOM is blank");
+    if(id&&seen[id])rowErrors.push("duplicate Products ID in this file; first used on row "+seen[id]);
+    if(id&&!seen[id])seen[id]=sourceLine;
+
+    var categoryText=rawImportCell(source,map.category);
+    var unitSizeText=rawImportCell(source,map.unitSize);
+    var statusText=rawImportCell(source,map.status);
+    var supplierText=rawImportCell(source,map.supplier);
+    var paymentText=rawImportCell(source,map.payment);
+    var picText=rawImportCell(source,map.pic);
+    var costText=rawImportCell(source,map.cost);
+    var minText=rawImportCell(source,map.minStock);
+    var openingText=rawImportCell(source,map.opening);
+    var parsedCost=rawImportNumber(costText);
+    var parsedMin=rawImportNumber(minText);
+    var parsedOpening=rawImportNumber(openingText);
+    var cost=parsedCost===null?0:parsedCost;
+    var minStock=parsedMin===null?1:parsedMin;
+    var opening=parsedOpening===null?0:parsedOpening;
+    if(costText!==""&&(!Number.isFinite(cost)||cost<0))rowErrors.push("Cost Per Unit must be a valid number of zero or more");
+    if(minText!==""&&(!Number.isFinite(minStock)||minStock<0))rowErrors.push("Low Stock Level must be a valid number of zero or more");
+    if(openingText!==""&&(!Number.isFinite(opening)||opening<0))rowErrors.push("Opening Balance must be a valid number of zero or more");
+
+    var openingDateText=rawImportCell(source,map.openingDate);
+    var openingDate=openingDateText?normaliseDateForImport(openingDateText):today();
+    if(openingDateText&&!openingDate)rowErrors.push("Opening Balance Date is invalid");
+
+    if(rowErrors.length){
+      errors.push("Row "+sourceLine+": "+rowErrors.join("; "));
+      continue;
+    }
+
+    var existing=rawById(id);
+    valid.push({
+      sourceLine:sourceLine,
+      id:id,
+      name:name,
+      category:categoryText||"Other",
+      hasCategory:categoryText!=="",
+      unitSize:unitSizeText,
+      hasUnitSize:unitSizeText!=="",
+      uom:uom,
+      cost:cost,
+      hasCost:costText!=="",
+      minStock:minStock,
+      hasMinStock:minText!=="",
+      status:rawImportStatus(statusText),
+      hasStatus:statusText!=="",
+      supplier:supplierText,
+      hasSupplier:supplierText!=="",
+      paymentMethod:paymentText,
+      hasPayment:paymentText!=="",
+      openingBalance:opening,
+      openingDate:openingDate||today(),
+      pic:picText||(currentSession&&currentSession.name)||"Bulk Import",
+      hasPic:picText!=="",
+      exists:!!existing
+    });
+  }
+
+  if(!valid.length&&errors.length)throw new Error("No valid raw-material rows were found.\n\n"+errors.slice(0,10).join("\n"));
+  if(!valid.length)throw new Error("No raw-material rows were found below the header.");
+
+  return {
+    fileName:fileName||"Uploaded file",
+    rows:valid,
+    errors:errors,
+    newCount:valid.filter(function(row){return !row.exists;}).length,
+    existingCount:valid.filter(function(row){return row.exists;}).length,
+    openingCount:valid.filter(function(row){return !row.exists&&row.openingBalance>0;}).length
+  };
+}
+
+function rawBulkPreviewHtml(pending){
+  var errorsHtml=pending.errors.length
+    ? '<div class="raw-import-errors"><b>Fix these rows before importing:</b><br>'+pending.errors.slice(0,30).map(esc).join("<br>")+(pending.errors.length>30?"<br>...and "+(pending.errors.length-30)+" more.":"")+'</div>'
+    : '<div class="good-box">Validation passed. No row errors were detected.</div>';
+  var preview=pending.rows.slice(0,15).map(function(row){
+    return '<tr><td>'+row.sourceLine+'</td><td><b>'+esc(row.id)+'</b></td><td>'+esc(row.name)+'</td><td>'+esc(row.category)+'</td><td>'+esc(row.uom)+'</td><td class="right">'+money(row.cost)+'</td><td class="right">'+qty(row.minStock)+'</td><td>'+esc(row.status)+'</td><td class="right">'+qty(row.openingBalance)+'</td><td>'+(row.exists?'<span class="status watch">UPDATE</span>':'<span class="status ok">NEW</span>')+'</td></tr>';
+  }).join("");
+  return `
+    <div class="note-box"><b>${esc(pending.fileName)}</b><br>The first worksheet is used for Excel files. Products ID is the matching key.</div>
+    <div class="raw-import-summary">
+      <div class="raw-import-stat"><span>Valid rows</span><strong>${pending.rows.length}</strong></div>
+      <div class="raw-import-stat"><span>New IDs</span><strong>${pending.newCount}</strong></div>
+      <div class="raw-import-stat"><span>Existing IDs</span><strong>${pending.existingCount}</strong></div>
+      <div class="raw-import-stat"><span>Opening balances</span><strong>${pending.openingCount}</strong></div>
+    </div>
+    ${errorsHtml}
+    <div class="raw-import-options">
+      <div class="field"><label>Existing Products ID handling</label><select id="rawBulkMode"><option value="UPSERT">Add new + update existing (Recommended)</option><option value="ADD_ONLY">Add new only; skip existing</option></select><div class="small">Nothing is deleted. Existing images and original created dates are kept.</div></div>
+      <div class="field"><label>Cost update rule</label><input value="Effective from ${esc(rawImportMonthStart())}" readonly><div class="small">For existing IDs, imported cost becomes an effective-dated change. Earlier months remain unchanged.</div></div>
+    </div>
+    <label class="raw-import-check"><input id="rawBulkBackup" type="checkbox" checked> Download a JSON safety backup before applying the import.</label>
+    <div class="warn-box"><b>Opening balance safety:</b> Opening Balance is created only for newly added Products IDs. Existing IDs are never given another opening balance, preventing double stock.</div>
+    <div class="raw-import-preview"><table><thead><tr><th>Row</th><th>Products ID</th><th>Name</th><th>Category</th><th>UOM</th><th>Cost</th><th>Low Level</th><th>Status</th><th>Opening</th><th>Action</th></tr></thead><tbody>${preview}</tbody></table></div>
+    ${pending.rows.length>15?'<div class="small" style="margin-top:7px">Preview shows the first 15 valid rows only.</div>':''}
+  `;
+}
+
+async function beginRawBulkImport(event){
+  var input=event&&event.target;
+  var file=input&&input.files&&input.files[0];
+  if(input)input.value="";
+  if(!file)return;
+  if(!rawBulkPermissionOk())return;
+  if(file.size>15*1024*1024)return alert("The file exceeds the 15 MB safety limit.");
+  try{
+    var rows=await readRawBulkFile(file);
+    RAW_BULK_IMPORT_PENDING=prepareRawBulkImport(rows,file.name);
+    openModal("Bulk Upload RAW_LIST",rawBulkPreviewHtml(RAW_BULK_IMPORT_PENDING),applyRawBulkImport);
+  }catch(error){
+    RAW_BULK_IMPORT_PENDING=null;
+    alert("RAW_LIST import could not be prepared.\n\n"+(error&&error.message||error));
+  }
+}
+
+function upsertRawCostFromBulk(row,existing){
+  if(!row.hasCost)return false;
+  var effectiveFrom=rawImportMonthStart();
+  var current=rawCostAt(existing,effectiveFrom);
+  if(Math.abs(Number(current)-Number(row.cost))<0.0000001)return false;
+  db.priceCostHistory=db.priceCostHistory||[];
+  var same=db.priceCostHistory.find(function(item){return item.type==="RAW_COST"&&item.itemKey===row.id&&item.effectiveFrom===effectiveFrom;});
+  if(same)db.priceCostHistory=db.priceCostHistory.filter(function(item){return item.id!==same.id;});
+  db.priceCostHistory.push({
+    id:uid("PCH"),type:"RAW_COST",itemKey:row.id,effectiveFrom:effectiveFrom,value:Number(row.cost||0),
+    note:"RAW_LIST bulk upload from "+(RAW_BULK_IMPORT_PENDING&&RAW_BULK_IMPORT_PENDING.fileName||"file"),
+    createdAt:nowIso(),createdBy:currentSession.name||currentSession.username||"Boss"
+  });
+  return true;
+}
+
+function applyRawBulkImport(){
+  if(!rawBulkPermissionOk())return;
+  var pending=RAW_BULK_IMPORT_PENDING;
+  if(!pending||!pending.rows||!pending.rows.length)return alert("No prepared import is available.");
+  if(pending.errors&&pending.errors.length)return alert("Import blocked. Fix all validation errors shown in the preview and upload the file again.");
+
+  var mode=selected("rawBulkMode")||"UPSERT";
+  var makeBackup=document.getElementById("rawBulkBackup")&&document.getElementById("rawBulkBackup").checked;
+  if(!confirm("Apply "+pending.rows.length+" validated RAW_LIST rows?\n\nNew IDs: "+pending.newCount+"\nExisting IDs: "+pending.existingCount+"\n\nNo raw material will be deleted."))return;
+  if(makeBackup)exportBackup("pre-raw-list-bulk-import");
+
+  var snapshot=clone(db),added=0,updated=0,skipped=0,openingAdded=0,costChanges=0;
+  try{
+    pending.rows.forEach(function(row){
+      var existing=rawById(row.id);
+      if(existing){
+        if(mode==="ADD_ONLY"){skipped++;return;}
+        if(upsertRawCostFromBulk(row,existing))costChanges++;
+        existing.name=row.name;
+        if(row.hasCategory)existing.category=row.category;
+        if(row.hasUnitSize)existing.unitSize=row.unitSize;
+        existing.uom=row.uom;
+        if(row.hasStatus)existing.status=row.status;
+        if(row.hasSupplier)existing.supplier=row.supplier;
+        if(row.hasPayment)existing.paymentMethod=row.paymentMethod;
+        if(row.hasMinStock)existing.minStock=Number(row.minStock||0);
+        if(row.hasPic)existing.pic=row.pic;
+        existing.updatedAt=nowIso();
+        updated++;
+        return;
+      }
+
+      var createdAt=nowIso();
+      var item={
+        id:row.id,name:row.name,category:row.category,unitSize:row.unitSize,uom:row.uom,
+        costPerUnit:Number(row.cost||0),status:row.status,supplier:row.supplier,paymentMethod:row.paymentMethod,
+        minStock:Number(row.minStock||0),image:"",pic:row.pic||currentSession.name,
+        createdAt:createdAt,updatedAt:createdAt,entryOpenedAt:createdAt
+      };
+      db.rawMaterials.push(item);
+      added++;
+
+      if(Number(row.openingBalance||0)>0){
+        var stockDate=row.openingDate||today();
+        db.stockIn.push({
+          id:uid("IN"),date:stockDate,createdAt:createdAt,entryOpenedAt:createdAt,
+          pic:row.pic||currentSession.name,productId:row.id,productName:row.name,
+          qty:Number(row.openingBalance),uom:row.uom,unitPrice:Number(row.cost||0),
+          totalCost:Number(row.openingBalance)*Number(row.cost||0),
+          reference:"RAW_LIST bulk import opening balance",receiptImage:"",qtyImage:""
+        });
+        openingAdded++;
+      }
+    });
+
+    db.settings.rawCategoryChoices=cleanDropdownChoices((db.settings.rawCategoryChoices||[]).concat(pending.rows.map(function(row){return row.category;})));
+    db.settings.rawPaymentChoices=cleanDropdownChoices((db.settings.rawPaymentChoices||[]).concat(pending.rows.map(function(row){return row.paymentMethod;})));
+    logActivity("RAW_BULK_IMPORT","RAW_LIST","Imported "+pending.rows.length+" validated rows from "+pending.fileName+". Added "+added+", updated "+updated+", skipped "+skipped+", opening balances "+openingAdded+", cost changes "+costChanges+".",{fileName:pending.fileName,added:added,updated:updated,skipped:skipped,openingBalances:openingAdded,costChanges:costChanges});
+    if(!saveDb())throw new Error("The browser could not save the imported data.");
+  }catch(error){
+    db=snapshot;
+    saveDb();
+    renderAll();
+    alert("Import failed and the in-memory changes were rolled back.\n\n"+(error&&error.message||error));
+    return;
+  }
+
+  RAW_BULK_IMPORT_PENDING=null;
+  closeModal();
+  renderAll();
+  alert("RAW_LIST bulk upload completed.\n\nAdded: "+added+"\nUpdated: "+updated+"\nSkipped: "+skipped+"\nOpening stock records: "+openingAdded+"\nEffective-dated cost updates: "+costChanges);
+}
+
+window.downloadRawImportTemplate=downloadRawImportTemplate;
+window.beginRawBulkImport=beginRawBulkImport;
+window.applyRawBulkImport=applyRawBulkImport;
+
 
 initControls();
 renderAll();

@@ -3530,6 +3530,84 @@ tr:hover td{
   .raw-import-summary,.raw-import-options{grid-template-columns:1fr;}
 }
 
+
+
+/* =========================================================
+   V10.2 CATEGORY-BASED RAW CODE + BOSS-ONLY PERMANENT DELETE
+   Category prefixes are based on Alpacco Raw List.xlsx.
+   ========================================================= */
+.raw-code-panel{
+  margin-top:7px;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff8f2;
+  color:var(--maroon-dark);
+  font-size:12px;
+  line-height:1.45;
+}
+.raw-code-panel strong{color:var(--maroon)}
+.raw-code-map{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  margin-top:7px;
+}
+.raw-code-map span{
+  display:inline-flex;
+  padding:4px 7px;
+  border-radius:999px;
+  border:1px solid #ead6cf;
+  background:#fffdfb;
+  font-size:10.5px;
+  font-weight:700;
+  color:#6f2730;
+}
+.raw-generated-id{
+  background:#f7f1ef!important;
+  color:#5b0f1a!important;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+.raw-delete-impact{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(130px,1fr));
+  gap:8px;
+  margin:10px 0;
+}
+.raw-delete-impact .impact-box{
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff7f3;
+  padding:9px 10px;
+}
+.raw-delete-impact .impact-box span{
+  display:block;
+  color:var(--muted);
+  font-size:10.5px;
+  margin-bottom:3px;
+}
+.raw-delete-impact .impact-box strong{
+  color:var(--maroon-dark);
+  font-size:16px;
+}
+.raw-danger-check{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  padding:10px 11px;
+  border:1px solid #efc2ca;
+  border-radius:12px;
+  background:#fff1f3;
+  color:#8f1528;
+  font-size:12px;
+  line-height:1.4;
+  margin:9px 0;
+}
+.raw-danger-check input{width:auto;margin-top:2px}
+.role-staff .raw-delete-btn{display:none!important}
+@media(max-width:700px){.raw-delete-impact{grid-template-columns:1fr}}
+
 </style>
 </head>
 
@@ -8922,6 +9000,288 @@ function applyRawBulkImport(){
 window.downloadRawImportTemplate=downloadRawImportTemplate;
 window.beginRawBulkImport=beginRawBulkImport;
 window.applyRawBulkImport=applyRawBulkImport;
+
+
+
+/* =========================================================
+   V10.2 CATEGORY-BASED RAW CODE + BOSS-ONLY PERMANENT DELETE
+   Rules read from Alpacco Raw List.xlsx:
+   IC BASED=B, CONE=CN, TOPPING=T, DRINK=D, SOFT DRINK=S,
+   CREAMER=CRM, PACKAGING=P, CLEANING=C, ICE CUBE=ICE, FOOD=MD.
+   ========================================================= */
+var RAW_CATEGORY_CODE_RULES={
+  "IC BASED":"B",
+  "CONE":"CN",
+  "TOPPING":"T",
+  "DRINK":"D",
+  "SOFT DRINK":"S",
+  "CREAMER":"CRM",
+  "PACKAGING":"P",
+  "CLEANING":"C",
+  "ICE CUBE":"ICE",
+  "FOOD":"MD"
+};
+
+function rawCategoryKey(value){
+  return String(value||"").trim().toUpperCase().replace(/\s+/g," ");
+}
+function rawEscapeRegExp(value){
+  return String(value||"").replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+}
+function rawCategoryPrefix(category){
+  var key=rawCategoryKey(category);
+  if(RAW_CATEGORY_CODE_RULES[key])return RAW_CATEGORY_CODE_RULES[key];
+  var words=key.replace(/[^A-Z0-9 ]/g," ").split(/\s+/).filter(Boolean);
+  var fallback=words.length>1?words.map(function(word){return word.charAt(0);}).join(""):String(words[0]||"R").slice(0,3);
+  return String(fallback||"R").slice(0,3);
+}
+function rawNameCodeToken(name){
+  var token=String(name||"").toUpperCase().replace(/[^A-Z0-9]+/g,"");
+  return (token||"ITEM").slice(0,28);
+}
+function rawNextCategorySequence(category,excludeId){
+  var prefix=rawCategoryPrefix(category);
+  var matcher=new RegExp("^"+rawEscapeRegExp(prefix)+"(\\d{1,5})(?:-|$)","i");
+  var max=0;
+  (db.rawMaterials||[]).forEach(function(item){
+    if(excludeId&&item.id===excludeId)return;
+    var match=String(item.id||"").match(matcher);
+    if(match)max=Math.max(max,Number(match[1]||0));
+  });
+  return String(max+1).padStart(3,"0");
+}
+function rawSuggestedProductId(category,name,excludeId){
+  return rawCategoryPrefix(category)+rawNextCategorySequence(category,excludeId)+"-"+rawNameCodeToken(name);
+}
+function rawCodeMapHtml(){
+  return Object.keys(RAW_CATEGORY_CODE_RULES).map(function(category){
+    return '<span>'+esc(category)+' → '+esc(RAW_CATEGORY_CODE_RULES[category])+'###</span>';
+  }).join("");
+}
+function updateRawAutoCode(){
+  var idInput=document.getElementById("rawId");
+  var help=document.getElementById("rawCodeHelp");
+  if(!idInput)return;
+  var edit=selected("rawEditId");
+  var category=selected("rawCategory");
+  var name=selected("rawName");
+  var prefix=rawCategoryPrefix(category);
+  if(edit){
+    idInput.value=edit;
+    if(help)help.innerHTML='<strong>Existing code locked:</strong> '+esc(edit)+'. Category or name edits will not rewrite historical transaction IDs.';
+    return;
+  }
+  var generated=rawSuggestedProductId(category,name,"");
+  idInput.value=generated;
+  if(help)help.innerHTML='<strong>Automatic rule:</strong> '+esc(category||"New category")+' uses <b>'+esc(prefix)+'###</b>. Final code: <b>'+esc(generated)+'</b>';
+}
+
+/* Reset the shared modal Save button before every modal opens. */
+function openModal(title,body,saveFn,onReady){
+  document.getElementById("modalTitle").textContent=title;
+  document.getElementById("modalBody").innerHTML=body;
+  currentModalSave=saveFn;
+  var saveButton=document.getElementById("modalSaveBtn");
+  saveButton.textContent="Save";
+  saveButton.className="btn-gold";
+  saveButton.onclick=function(){return currentModalSave&&currentModalSave();};
+  document.getElementById("modalBackdrop").classList.add("active");
+  if(onReady)setTimeout(onReady,0);
+}
+
+function openRawModal(id=""){
+  var p=id?rawById(id):{};
+  if(id&&!p)return alert("Raw material was not found.");
+  modalOpenedAt=nowIso();
+  var defaultPic=(p&&p.pic)||(currentSession&&currentSession.name)||"";
+  openModal(id?"Edit Raw Material":"Add Raw Material",`
+    <div class="note-box">Entry opened at: <b>${localDateTime(modalOpenedAt)}</b>. This time will be saved automatically.</div>
+    <input id="rawEditId" type="hidden" value="${esc(id)}">
+    <div class="form-row">
+      <div class="field"><label>Person In Charge</label><input id="rawPic" required value="${esc(defaultPic)}" placeholder="Staff name"></div>
+      <div class="field"><label>Category</label><select id="rawCategory" onchange="updateRawAutoCode()">${rawSettingsDropdownOptions("category",p.category||"")}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Products Name</label><input id="rawName" required value="${esc(p.name||"")}" oninput="updateRawAutoCode()" placeholder="Example: Oat Milk"></div>
+      <div class="field"><label>Products ID</label><input id="rawId" class="raw-generated-id" required readonly value="${esc(p.id||"")}"><div id="rawCodeHelp" class="raw-code-panel"></div></div>
+    </div>
+    <div class="raw-code-panel"><strong>Category code reference from your Excel file</strong><div class="raw-code-map">${rawCodeMapHtml()}</div><div class="small" style="margin-top:7px">Existing legacy IDs such as ICECUBE remain unchanged. New ICE CUBE items use ICE###.</div></div>
+    <div class="form-row"><div class="field"><label>Original Packaging / Unit Size</label><input id="rawUnitSize" value="${esc(p.unitSize||"")}" placeholder="Example: 1KG / 500G / 1 bottle"></div><div class="field"><label>UOM</label><input id="rawUom" required value="${esc(p.uom||"")}" placeholder="KG, L, UNIT, BOTTLE"></div></div>
+    <div class="form-row"><div class="field"><label>Cost Per Unit (RM)</label><input id="rawCost" type="number" step="0.0001" value="${id?rawCostAt(p,today()):Number(p.costPerUnit||0)}" ${id?'readonly title="Use Settings → Price & Raw Cost Effective Dates"':''}><div class="field-help">${id?'Change cost in Settings → Price & Raw Cost Effective Dates so old months stay correct.':'Opening cost for this new raw material.'}</div></div><div class="field"><label>Low Stock Level</label><input id="rawMin" type="number" step="0.01" value="${Number(p.minStock||1)}"></div></div>
+    <div class="form-row"><div class="field"><label>Status</label><select id="rawStatus"><option ${p.status==="ACTIVE"?"selected":""}>ACTIVE</option><option ${p.status==="DEACTIVE"?"selected":""}>DEACTIVE</option></select></div><div class="field"><label>Payment Method</label><select id="rawPayment">${rawSettingsDropdownOptions("payment",p.paymentMethod||"")}</select></div></div>
+    <div class="field"><label>Supplier</label><input id="rawSupplier" value="${esc(p.supplier||"")}"></div>
+    <div class="field"><label>Ingredient Image</label><input id="rawImage" type="file" accept="image/*"><div class="small">Leave empty to keep the existing image.</div></div>
+  `,saveRawModal,function(){updateRawAutoCode();});
+}
+
+async function saveRawModal(){
+  if(!currentSession||!userCanAccess("raw"))return alert("RAW_LIST permission is required.");
+  var edit=selected("rawEditId");
+  var pic=selected("rawPic").trim();
+  var name=selected("rawName").trim();
+  var category=selected("rawCategory").trim();
+  var uom=selected("rawUom").trim().toUpperCase();
+  if(!pic)return alert("Person In Charge is required.");
+  if(!name)return alert("Products Name is required.");
+  if(!category)return alert("Category is required.");
+  if(!uom)return alert("UOM is required.");
+
+  var id=edit||rawSuggestedProductId(category,name,"");
+  id=String(id).trim().toUpperCase();
+  var exists=db.rawMaterials.find(function(item){return item.id===id;});
+  if(!edit&&exists)return alert("The generated Products ID already exists. Close and reopen the form to generate the next code.");
+
+  var old=edit?rawById(edit):{};
+  var img=await readImage("rawImage");
+  var item={
+    id:id,
+    name:name,
+    category:category,
+    unitSize:selected("rawUnitSize").trim(),
+    uom:uom,
+    costPerUnit:edit?Number(old.costPerUnit||0):Number(selected("rawCost")||0),
+    status:selected("rawStatus")||"ACTIVE",
+    supplier:selected("rawSupplier").trim(),
+    paymentMethod:selected("rawPayment").trim(),
+    minStock:Number(selected("rawMin")||0),
+    image:img||(old&&old.image)||"",
+    pic:pic,
+    createdAt:(old&&old.createdAt)||modalOpenedAt,
+    updatedAt:nowIso(),
+    entryOpenedAt:modalOpenedAt
+  };
+
+  if(edit)db.rawMaterials=db.rawMaterials.map(function(existing){return existing.id===edit?item:existing;});
+  else db.rawMaterials.push(item);
+
+  db.settings.rawCategoryChoices=cleanDropdownChoices((db.settings.rawCategoryChoices||[]).concat([category]));
+  logActivity(edit?"RAW_UPDATE":"RAW_CREATE","RAW_LIST",(currentSession.name||"Boss")+(edit?" updated ":" created ")+id+" — "+name+".",{productId:id,category:category});
+  closeModal();
+  renderAll();
+}
+
+function rawBossDeleteAllowed(){
+  return !!(currentSession&&currentSession.role==="boss"&&userCanAccess("raw"));
+}
+function rawDeleteImpact(id){
+  var inRows=(db.stockIn||[]).filter(function(row){return row.productId===id;});
+  var outRows=(db.stockOut||[]).filter(function(row){return row.productId===id;});
+  var ingredientKeys=Object.keys(db.ingredientMap||{}).filter(function(key){return db.ingredientMap[key]&&db.ingredientMap[key].productId===id;});
+  var costRows=(db.priceCostHistory||[]).filter(function(row){return row.type==="RAW_COST"&&row.itemKey===id;});
+  var countItems=0;
+  (db.stockCounts||[]).forEach(function(record){countItems+=(record.items||[]).filter(function(item){return item.productId===id;}).length;});
+  return {inRows:inRows,outRows:outRows,ingredientKeys:ingredientKeys,costRows:costRows,countItems:countItems,balance:stockStats(id).balance};
+}
+function rawDeleteLinkedTotal(impact){
+  return impact.inRows.length+impact.outRows.length+impact.ingredientKeys.length+impact.costRows.length+impact.countItems;
+}
+function rawDeleteBackup(id,reason){
+  var payload={
+    backupType:"BEFORE_RAW_MATERIAL_DELETE",
+    createdAt:nowIso(),
+    createdBy:(currentSession&&currentSession.name)||"Boss",
+    productId:id,
+    reason:reason,
+    data:clone(db)
+  };
+  downloadBlob(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}),"before-delete-"+String(id).replace(/[^A-Z0-9_-]/gi,"-")+"-"+today()+".json");
+}
+function openDeleteRawModal(id){
+  if(!rawBossDeleteAllowed())return alert("Only a logged-in Boss with RAW_LIST permission can delete raw materials.");
+  var p=rawById(id);
+  if(!p)return alert("Raw material was not found.");
+  var impact=rawDeleteImpact(id);
+  var linked=rawDeleteLinkedTotal(impact);
+  openModal("Boss Delete Raw Material",`
+    <div class="warn-box"><b>Permanent deletion:</b> ${esc(p.id)} — ${esc(p.name)}. This action cannot be undone inside the system.</div>
+    <div class="raw-delete-impact">
+      <div class="impact-box"><span>Current balance</span><strong>${qty(impact.balance)} ${esc(p.uom||"")}</strong></div>
+      <div class="impact-box"><span>IN_STOCK records</span><strong>${impact.inRows.length}</strong></div>
+      <div class="impact-box"><span>OUT_STOCK records</span><strong>${impact.outRows.length}</strong></div>
+      <div class="impact-box"><span>Recipe links</span><strong>${impact.ingredientKeys.length}</strong></div>
+      <div class="impact-box"><span>Stock-count entries</span><strong>${impact.countItems}</strong></div>
+      <div class="impact-box"><span>Cost-history rows</span><strong>${impact.costRows.length}</strong></div>
+    </div>
+    <input id="rawDeleteId" type="hidden" value="${esc(id)}">
+    <div class="field"><label>Delete reason</label><textarea id="rawDeleteReason" placeholder="Explain why this raw material must be permanently deleted."></textarea></div>
+    <div class="field"><label>Type the exact Products ID to confirm</label><input id="rawDeleteConfirm" autocomplete="off" placeholder="${esc(id)}"></div>
+    ${linked?'<label class="raw-danger-check"><input id="rawDeleteCascade" type="checkbox"> <span>I understand that linked stock transactions and cost history will be deleted, stock-count entries will be removed, and recipe links will be disconnected.</span></label>':'<div class="good-box">No linked stock, recipe, stock-count or cost-history records were found.</div>'}
+    <label class="raw-danger-check"><input id="rawDeleteBackup" type="checkbox" checked> <span>Download a complete JSON safety backup before deletion.</span></label>
+  `,deleteRawMaterialPermanent,function(){
+    var button=document.getElementById("modalSaveBtn");
+    button.textContent="Delete Permanently";
+    button.className="btn-red";
+  });
+}
+function deleteRawMaterialPermanent(){
+  if(!rawBossDeleteAllowed())return alert("Only a logged-in Boss with RAW_LIST permission can delete raw materials.");
+  var id=selected("rawDeleteId");
+  var p=rawById(id);
+  if(!p)return alert("Raw material was not found.");
+  var reason=selected("rawDeleteReason").trim();
+  var typed=selected("rawDeleteConfirm").trim().toUpperCase();
+  if(reason.length<5)return alert("Enter a clear delete reason of at least 5 characters.");
+  if(typed!==String(id).toUpperCase())return alert("The confirmation Products ID does not match.");
+  var impact=rawDeleteImpact(id);
+  var linked=rawDeleteLinkedTotal(impact);
+  if(linked&&!(document.getElementById("rawDeleteCascade")&&document.getElementById("rawDeleteCascade").checked))return alert("Confirm the linked-record deletion checkbox before continuing.");
+  if(!confirm("Permanently delete "+id+" — "+p.name+"?\n\nThis will remove the raw material and its linked operational records."))return;
+
+  if(document.getElementById("rawDeleteBackup")&&document.getElementById("rawDeleteBackup").checked)rawDeleteBackup(id,reason);
+  var snapshot=clone(db);
+  try{
+    db.rawMaterials=(db.rawMaterials||[]).filter(function(item){return item.id!==id;});
+    db.stockIn=(db.stockIn||[]).filter(function(row){return row.productId!==id;});
+    db.stockOut=(db.stockOut||[]).filter(function(row){return row.productId!==id;});
+    db.priceCostHistory=(db.priceCostHistory||[]).filter(function(row){return !(row.type==="RAW_COST"&&row.itemKey===id);});
+    db.settings.stockCountItemIds=(db.settings.stockCountItemIds||[]).filter(function(itemId){return itemId!==id;});
+    (db.stockCounts||[]).forEach(function(record){record.items=(record.items||[]).filter(function(item){return item.productId!==id;});});
+    Object.keys(db.ingredientMap||{}).forEach(function(key){
+      var map=db.ingredientMap[key];
+      if(map&&map.productId===id){
+        map.productId="";
+        map.note=((map.note||"")+" [Raw material "+id+" deleted by Boss on "+today()+"]").trim();
+      }
+    });
+    logActivity("RAW_DELETE","RAW_LIST",(currentSession.name||"Boss")+" permanently deleted "+id+" — "+p.name+". Reason: "+reason,{productId:id,reason:reason,stockInDeleted:impact.inRows.length,stockOutDeleted:impact.outRows.length,recipeLinksDisconnected:impact.ingredientKeys.length,stockCountItemsDeleted:impact.countItems,costRowsDeleted:impact.costRows.length});
+    if(!saveDb())throw new Error("The browser could not save the deletion.");
+  }catch(error){
+    db=snapshot;
+    saveDb();
+    renderAll();
+    return alert("Delete failed and all changes were rolled back.\n\n"+String(error&&error.message||error));
+  }
+  closeModal();
+  renderAll();
+  alert("Raw material deleted successfully.\n\nProducts ID: "+id+"\nDeleted by: "+(currentSession.name||"Boss"));
+}
+
+function rawRowHtml(p,masterView){
+  var st=stockStats(p.id),status=stockStatus(p,st.balance),active=(p.status||"ACTIVE")==="ACTIVE";
+  var canEdit=!!(currentSession&&userCanAccess("raw"));
+  var canDelete=!!(masterView&&rawBossDeleteAllowed());
+  return `<div class="row-card">
+    ${rawAvatar(p)}
+    <div class="row-main"><strong>${esc(p.id)}</strong><div class="name">${esc(p.name)}</div><div class="meta">${esc(p.category||"-")} • Unit Size: ${esc(p.unitSize||"-")} • UOM: ${esc(p.uom||"-")}</div></div>
+    <div class="row-cell"><div class="label">Current Balance</div><div class="val ${st.balance<=Number(p.minStock||0)?'red-text':'green-text'}">${qty(st.balance)} ${esc(p.uom||"")}</div></div>
+    <div class="row-cell"><div class="label">Stock Value</div><div class="val">${money(st.balance*rawCostAt(p,today()))}</div></div>
+    <div class="row-cell"><div class="label">Low Level</div><div class="val">${qty(p.minStock)}</div></div>
+    <div class="row-cell"><div class="label">Supplier</div><div class="val" style="font-size:12px">${esc(p.supplier||"-")}</div></div>
+    <div class="row-actions"><span class="status ${active?'ok':'deactive'}">${esc(p.status||"-")}</span><span class="status ${status.cls}">${status.label}</span>${canEdit?`<button class="btn-light" onclick="openRawModal('${jsq(p.id)}')">Edit</button>`:""}${canDelete?`<button class="btn-red raw-delete-btn" onclick="openDeleteRawModal('${jsq(p.id)}')">Delete</button>`:""}</div>
+  </div>`;
+}
+function renderRaw(){
+  var q=selected("rawSearch").toLowerCase(),f=selected("rawStatusFilter");
+  var rows=db.rawMaterials.slice().sort(function(a,b){return a.id.localeCompare(b.id);}).filter(function(p){
+    var st=stockStats(p.id),low=st.balance<=Number(p.minStock||0);
+    return (!q||(`${p.id} ${p.name} ${p.category} ${p.supplier}`).toLowerCase().includes(q))&&(!f||(f==="LOW STOCK"?low:(p.status||"ACTIVE")===f));
+  });
+  setHtml("rawBody",rows.map(function(p){return rawRowHtml(p,true);}).join("")||'<div class="row-card">No raw materials found.</div>');
+}
+
+window.updateRawAutoCode=updateRawAutoCode;
+window.openDeleteRawModal=openDeleteRawModal;
+window.deleteRawMaterialPermanent=deleteRawMaterialPermanent;
 
 
 initControls();

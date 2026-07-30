@@ -3952,14 +3952,15 @@ tr:hover td{
           <input id="inYear" type="number" value="2026" onchange="renderStockIn()">
           <input id="inSearch" placeholder="Search ledger..." oninput="renderStockIn()">
           <button class="btn-green" onclick="openStockInModal()">+ Add Stock In</button>
-          <button class="btn-purple" onclick="document.getElementById('stockInCsvFile').click()">Import IN_STOCK CSV</button>
-          <button class="btn-light" onclick="downloadStockInTemplate()">Download IN Template</button>
-          <input id="stockInCsvFile" type="file" accept=".csv,text/csv" style="display:none" onchange="importStockInCsv(event)">
+          <button class="btn-purple" onclick="document.getElementById('stockInImportFile').click()">Import Stock In (CSV / Excel)</button>
+          <button class="btn-light" onclick="downloadStockInTemplate('xlsx')">Download Excel Template</button>
+          <button class="btn-light" onclick="downloadStockInTemplate('csv')">Download CSV Template</button>
+          <input id="stockInImportFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="importStockInFile(event)">
           <button class="btn-blue" onclick="exportCsv('stockIn')">Export CSV</button>
         </div>
       </div>
       <div class="note-box">
-        <strong>CSV format:</strong> <b>Date, Product ID, Qty</b>. Optional: Unit Price, PIC, Reference, Time.
+        <strong>Accepted upload files:</strong> CSV or Excel (<b>.xlsx / .xls</b>). Required columns: <b>Date, Product ID, Qty</b>. Optional: Unit Price, PIC, Reference, Time. The first worksheet will be imported for Excel files.
       </div>
       <div id="stockInBody" class="ledger-list"></div>
     </div>
@@ -5329,63 +5330,126 @@ function matchRawMaterialForImport(value){
       || db.rawMaterials.find(p=>String(p.id).trim().toLowerCase().includes(target))
       || db.rawMaterials.find(p=>String(p.name).trim().toLowerCase().includes(target));
 }
-function importStockInCsv(event){
+function importStockInFile(event){
   const file=event.target.files[0];
   event.target.value="";
   if(!file)return;
-  if(file.size>5*1024*1024)return alert("CSV file exceeds the 5 MB safety limit.");
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      const rows=parseCsvText(e.target.result);
-      if(rows.length<2)return alert("CSV has no data rows.");
-      const headers=rows[0];
-      const dateCol=findCsvColumn(headers,["Date","Stock In Date","In Date"]);
-      const timeCol=findCsvColumn(headers,["Time","Created Time","Entry Time"]);
-      const productCol=findCsvColumn(headers,["Product ID","ProductId","SKU","Raw ID","Material ID","Product","Product Name"]);
-      const qtyCol=findCsvColumn(headers,["Qty","Quantity","Quantity In","Stock In Qty","In Qty"]);
-      const unitPriceCol=findCsvColumn(headers,["Unit Price","Unit Cost","Cost","Price"]);
-      const picCol=findCsvColumn(headers,["PIC","Person In Charge","Staff","Staff Name"]);
-      const refCol=findCsvColumn(headers,["Reference","Supplier","Receipt","Invoice","Remark","Note"]);
-      if(productCol<0 || qtyCol<0){
-        alert("Import failed. CSV must include Product ID and Qty columns.");
+
+  const extension=String(file.name||"").split(".").pop().toLowerCase();
+  if(!["csv","xlsx","xls"].includes(extension)){
+    alert("Unsupported file type. Please upload CSV, XLSX or XLS.");
+    return;
+  }
+  if(file.size>10*1024*1024){
+    alert("The selected file exceeds the 10 MB safety limit.");
+    return;
+  }
+
+  readRawBulkFile(file).then(rows=>{
+    if(!Array.isArray(rows)||rows.length<2){
+      alert("The selected file has no stock-in data rows.");
+      return;
+    }
+
+    const headers=rows[0].map(value=>String(value??"").trim());
+    const dateCol=findCsvColumn(headers,["Date","Stock In Date","In Date"]);
+    const timeCol=findCsvColumn(headers,["Time","Created Time","Entry Time"]);
+    const productCol=findCsvColumn(headers,["Product ID","ProductId","Products ID","SKU","Raw ID","Material ID","Product","Product Name","Products Name"]);
+    const qtyCol=findCsvColumn(headers,["Qty","Quantity","Quantity In","Stock In Qty","In Qty"]);
+    const unitPriceCol=findCsvColumn(headers,["Unit Price","Unit Cost","Cost Per Unit","Cost","Price"]);
+    const picCol=findCsvColumn(headers,["PIC","Person In Charge","Staff","Staff Name"]);
+    const refCol=findCsvColumn(headers,["Reference","Supplier","Receipt","Invoice","Remark","Note"]);
+
+    if(productCol<0 || qtyCol<0){
+      alert("Import failed. The file must include Product ID and Qty columns.");
+      return;
+    }
+
+    let imported=0, skipped=0;
+    const skippedRows=[];
+    const sourceLabel=extension==="csv"?"CSV":"Excel";
+
+    rows.slice(1).forEach((r,idx)=>{
+      if(!Array.isArray(r))r=[];
+      const rowHasData=r.some(value=>String(value??"").trim()!=="");
+      if(!rowHasData)return;
+
+      const raw=matchRawMaterialForImport(r[productCol]);
+      if(!raw){
+        skipped++;
+        skippedRows.push(`Row ${idx+2}: raw material not found - ${r[productCol]||""}`);
         return;
       }
-      let imported=0, skipped=0;
-      const skippedRows=[];
-      rows.slice(1).forEach((r,idx)=>{
-        const raw=matchRawMaterialForImport(r[productCol]);
-        if(!raw){skipped++; skippedRows.push(`Row ${idx+2}: raw material not found - ${r[productCol]||""}`); return;}
-        const q=parseNumberFromCsv(r[qtyCol]);
-        if(q<=0){skipped++; skippedRows.push(`Row ${idx+2}: quantity is empty or zero`); return;}
-        const date=dateCol>=0?normaliseDateForImport(r[dateCol]):today();
-        if(!date){skipped++; skippedRows.push(`Row ${idx+2}: invalid date - ${r[dateCol]||""}`); return;}
-        const unitPrice=unitPriceCol>=0 && String(r[unitPriceCol]||"").trim()!=="" ? parseNumberFromCsv(r[unitPriceCol]) : rawCostAt(raw,date);
-        const reference=refCol>=0?String(r[refCol]||"Imported from CSV").trim():"Imported from CSV";
-        const candidate={date,productId:raw.id,qty:q,unitPrice,reference};
-        if(db.stockIn.some(t=>rtStockInFingerprint(t)===rtStockInFingerprint(candidate))){skipped++; skippedRows.push(`Row ${idx+2}: exact duplicate stock-in`); return;}
-        const createdAt=createdAtFromImport(date, timeCol>=0?r[timeCol]:"00:00:00");
-        if(!createdAt){skipped++; skippedRows.push(`Row ${idx+2}: invalid time - ${timeCol>=0?r[timeCol]||"":""}`); return;}
-        db.stockIn.push({
-          id:uid("IN"), date, createdAt, entryOpenedAt:createdAt,
-          pic:picCol>=0?String(r[picCol]||"Imported").trim():"Imported",
-          productId:raw.id, productName:raw.name, qty:q, uom:raw.uom||"",
-          unitPrice, totalCost:q*unitPrice,
-          reference,
-          receiptImage:"", qtyImage:"", importSource:"CSV"
-        });
-        imported++;
-      });
-      saveDb(); renderAll();
-      let msg=`IN_STOCK CSV import completed.\n\nImported: ${imported}\nSkipped: ${skipped}`;
-      if(skippedRows.length){
-        msg += `\n\nSkipped rows:\n` + skippedRows.slice(0,12).join("\n");
-        if(skippedRows.length>12)msg += `\n...and ${skippedRows.length-12} more.`;
+
+      const q=parseNumberFromCsv(r[qtyCol]);
+      if(q<=0){
+        skipped++;
+        skippedRows.push(`Row ${idx+2}: quantity is empty, zero or invalid`);
+        return;
       }
-      alert(msg);
-    }catch(err){console.error(err); alert("IN_STOCK import failed. Please check your CSV format.");}
-  };
-  reader.readAsText(file);
+
+      const date=dateCol>=0?normaliseDateForImport(r[dateCol]):today();
+      if(!date){
+        skipped++;
+        skippedRows.push(`Row ${idx+2}: invalid date - ${r[dateCol]||""}`);
+        return;
+      }
+
+      const unitPrice=unitPriceCol>=0 && String(r[unitPriceCol]??"").trim()!==""
+        ? parseNumberFromCsv(r[unitPriceCol])
+        : rawCostAt(raw,date);
+      const reference=refCol>=0 && String(r[refCol]??"").trim()!==""
+        ? String(r[refCol]).trim()
+        : `Imported from ${sourceLabel}`;
+      const candidate={date,productId:raw.id,qty:q,unitPrice,reference};
+
+      if(db.stockIn.some(t=>rtStockInFingerprint(t)===rtStockInFingerprint(candidate))){
+        skipped++;
+        skippedRows.push(`Row ${idx+2}: exact duplicate stock-in`);
+        return;
+      }
+
+      const createdAt=createdAtFromImport(date,timeCol>=0?r[timeCol]:"00:00:00");
+      if(!createdAt){
+        skipped++;
+        skippedRows.push(`Row ${idx+2}: invalid time - ${timeCol>=0?r[timeCol]||"":""}`);
+        return;
+      }
+
+      db.stockIn.push({
+        id:uid("IN"),date,createdAt,entryOpenedAt:createdAt,
+        pic:picCol>=0 && String(r[picCol]??"").trim()!=="" ? String(r[picCol]).trim() : "Imported",
+        productId:raw.id,productName:raw.name,qty:q,uom:raw.uom||"",
+        unitPrice,totalCost:q*unitPrice,reference,
+        receiptImage:"",qtyImage:"",importSource:sourceLabel,
+        importFileName:file.name||""
+      });
+      imported++;
+    });
+
+    if(imported>0){
+      saveDb();
+      renderAll();
+      logActivity("STOCK_IN","IN_STOCK",`${sourceLabel} bulk import: ${imported} added, ${skipped} skipped`,{
+        fileName:file.name||"",imported,skipped
+      });
+    }
+
+    let msg=`IN_STOCK ${sourceLabel} import completed.\n\nImported: ${imported}\nSkipped: ${skipped}`;
+    if(skippedRows.length){
+      msg += `\n\nSkipped rows:\n`+skippedRows.slice(0,12).join("\n");
+      if(skippedRows.length>12)msg += `\n...and ${skippedRows.length-12} more.`;
+    }
+    alert(msg);
+  }).catch(err=>{
+    console.error(err);
+    alert(`IN_STOCK import failed. ${err&&err.message?err.message:"Please check the file format."}`);
+  });
+}
+
+// Backward-compatible alias for older saved buttons or browser cache.
+function importStockInCsv(event){
+  return importStockInFile(event);
 }
 function importStockOutCsv(event){
   const file=event.target.files[0];
@@ -5450,12 +5514,31 @@ function importStockOutCsv(event){
   };
   reader.readAsText(file);
 }
-function downloadStockInTemplate(){
+function downloadStockInTemplate(format="xlsx"){
   const headers=["Date","Time","Product ID","Qty","Unit Price","PIC","Reference"];
   const sample=db.rawMaterials[0];
-  const rows=[[today(),"09:00:00",sample?sample.id:"RAW-EXAMPLE",1,sample?sample.costPerUnit:0,"Imported","Opening / past stock in"]];
-  const csv=[headers,...rows].map(r=>r.map(c=>`"${String(c??"").replaceAll('"','""')}"`).join(",")).join("\n");
-  downloadBlob(new Blob([csv],{type:"text/csv;charset=utf-8"}),`in-stock-import-template-${today()}.csv`);
+  const rows=[
+    headers,
+    [today(),"09:00:00",sample?sample.id:"RAW-EXAMPLE",1,sample?sample.costPerUnit:0,"Imported","Opening / past stock in"]
+  ];
+
+  if(String(format).toLowerCase()==="csv"){
+    const csv=rows.map(r=>r.map(c=>`"${String(c??"").replaceAll('"','""')}"`).join(",")).join("\n");
+    downloadBlob(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}),`in-stock-import-template-${today()}.csv`);
+    return;
+  }
+
+  if(!window.XLSX){
+    alert("Excel template support could not load. Please use the CSV template instead.");
+    return;
+  }
+  const worksheet=XLSX.utils.aoa_to_sheet(rows);
+  worksheet["!cols"]=[
+    {wch:14},{wch:12},{wch:22},{wch:12},{wch:14},{wch:18},{wch:34}
+  ];
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,worksheet,"IN_STOCK Import");
+  XLSX.writeFile(workbook,`in-stock-import-template-${today()}.xlsx`);
 }
 function downloadStockOutTemplate(){
   const headers=["Date","Time","Product ID","Qty","Out Type","Unit Cost","PIC","Remark"];
@@ -9291,5 +9374,6 @@ syncLoginOverlay();
 initCloudSync();
 setTimeout(()=>showStockCountReminder(false),1200);
 </script>
+<!-- V10.3 STOCK IN CSV + EXCEL IMPORT — 2026-07-30 -->
 </body>
 </html>

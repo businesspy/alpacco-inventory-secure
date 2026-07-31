@@ -4573,7 +4573,7 @@ let modalOpenedAt = "";
 
 function clone(obj){return JSON.parse(JSON.stringify(obj));}
 function normalizeDb(d){
-  d.meta=d.meta||{}; d.meta.schemaVersion="10.0";
+  d.meta=d.meta||{}; d.meta.schemaVersion="10.8";
   d.rawMaterials=d.rawMaterials||[]; d.stockIn=d.stockIn||[]; d.stockOut=d.stockOut||[];
   d.menu=d.menu||[]; d.expenses=d.expenses||[]; d.sales=d.sales||[]; d.recipes=d.recipes||{};
   d.ingredientMap=d.ingredientMap||{}; d.salesUploads=d.salesUploads||[]; d.salesDifferences=d.salesDifferences||[];
@@ -4655,6 +4655,8 @@ function normalizeDb(d){
   d.rawMaterials.forEach(p=>{p.minStock=Number(p.minStock??1);p.image=p.image||"";p.pic=p.pic||"";p.createdAt=p.createdAt||p.createdDate||"";p.updatedAt=p.updatedAt||"";});
   d.stockIn.forEach(t=>{const rp=d.rawMaterials.find(p=>p.id===t.productId);t.id=t.id||uid("IN");t.createdAt=t.createdAt||`${t.date||today()}T00:00:00`;t.uom=t.uom||rp?.uom||"";t.receiptImage=t.receiptImage||"";t.qtyImage=t.qtyImage||"";if(t.receiptImage&&!t.receiptUploadedAt)t.receiptUploadedAt=t.createdAt;if(t.qtyImage&&!t.qtyImageUploadedAt)t.qtyImageUploadedAt=t.createdAt;});
   d.stockOut.forEach(t=>{const rp=d.rawMaterials.find(p=>p.id===t.productId);t.id=t.id||uid("OUT");t.createdAt=t.createdAt||`${t.date||today()}T00:00:00`;t.type=t.type||"Production Use";t.uom=t.uom||rp?.uom||"";t.receiptImage=t.receiptImage||"";if(t.receiptImage&&!t.proofUploadedAt)t.proofUploadedAt=t.proofCapturedAt||t.createdAt;t.proofSignature=t.proofSignature||imageSignature(t.receiptImage);});
+  ensureUniqueTransactionIds(d.stockIn,"IN");
+  ensureUniqueTransactionIds(d.stockOut,"OUT");
   d.menu.forEach(m=>{m.wastagePercent=Number(m.wastagePercent||0);m.status=m.status||"ACTIVE";});
   d.expenses.forEach(e=>{e.id=e.id||uid("EXP");e.createdAt=e.createdAt||`${e.date||today()}T00:00:00`;e.paymentMethod=e.paymentMethod||e.method||"";delete e.method;});
   return d;
@@ -4802,6 +4804,57 @@ function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt
 /* Safe for a value placed inside a quoted inline JavaScript string. */
 function jsq(v){return String(v??"").replaceAll("\\","\\\\").replaceAll("'","\\u0027").replaceAll('"',"\\u0022").replaceAll("<","\\u003c").replaceAll(">","\\u003e").replaceAll("&","\\u0026").replaceAll("\r","\\r").replaceAll("\n","\\n");}
 function uid(prefix="ID"){return prefix+"-"+Date.now().toString(36).toUpperCase()+"-"+Math.random().toString(36).slice(2,7).toUpperCase();}
+
+/* V10.8 permanent business transaction IDs for every stock movement. */
+function normalizeTransactionId(value){
+  return String(value==null?"":value).trim().toUpperCase().replace(/\s+/g,"-").replace(/[^A-Z0-9_-]/g,"");
+}
+function transactionDateKey(value){
+  var text=String(value||today()).slice(0,10).replace(/[^0-9]/g,"");
+  return /^\d{8}$/.test(text)?text:String(today()).replace(/-/g,"");
+}
+function transactionIdSet(direction){
+  var list=[];
+  try{list=direction==="OUT"?(db.stockOut||[]):(db.stockIn||[]);}catch(error){list=[];}
+  return new Set(list.map(function(row){return normalizeTransactionId(row&&row.transactionId);}).filter(Boolean));
+}
+function nextTransactionId(direction,date,usedSet){
+  var prefix=direction==="OUT"?"OUT":"IN";
+  var dateKey=transactionDateKey(date);
+  var base=prefix+"-"+dateKey+"-";
+  var used=usedSet||transactionIdSet(direction);
+  var max=0;
+  used.forEach(function(value){
+    var match=String(value||"").match(new RegExp("^"+base+"(\\d+)$"));
+    if(match)max=Math.max(max,Number(match[1])||0);
+  });
+  var sequence=max+1,id="";
+  do{id=base+String(sequence++).padStart(4,"0");}while(used.has(id));
+  return id;
+}
+function ensureUniqueTransactionIds(list,direction){
+  if(!Array.isArray(list))return list;
+  var used=new Set();
+  var ordered=list.slice().sort(function(a,b){
+    var av=String((a&&a.createdAt)||(a&&a.date)||"")+"|"+String((a&&a.id)||"");
+    var bv=String((b&&b.createdAt)||(b&&b.date)||"")+"|"+String((b&&b.id)||"");
+    return av.localeCompare(bv);
+  });
+  ordered.forEach(function(row){
+    if(!row)return;
+    var proposed=normalizeTransactionId(row.transactionId);
+    if(!proposed||used.has(proposed))proposed=nextTransactionId(direction,row.date||String(row.createdAt||"").slice(0,10),used);
+    row.transactionId=proposed;
+    used.add(proposed);
+  });
+  return list;
+}
+function transactionIdExists(direction,transactionId){
+  var id=normalizeTransactionId(transactionId);
+  if(!id)return false;
+  var list=direction==="OUT"?(db.stockOut||[]):(db.stockIn||[]);
+  return list.some(function(row){return normalizeTransactionId(row.transactionId)===id;});
+}
 function nowIso(){return new Date().toISOString();}
 function today(){return new Date().toISOString().slice(0,10);}
 function localDateTime(iso){if(!iso)return"-";const d=new Date(iso);return isNaN(d) ? esc(iso) : d.toLocaleString("en-MY",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
@@ -5301,7 +5354,7 @@ function stockLedgerItem(t,direction){
   const isOut=direction==="OUT"; const cost=Number(t.totalCost||Number(t.qty||0)*Number(t.unitPrice||0));
   const proofLabel=isOut?"Proof":"Receipt";
   return `<div class="ledger-item">
-    <div class="timeline"><strong>${localDateTime(t.createdAt)}</strong><span>${esc(t.date||"-")} • ${esc(t.pic||"-")}</span></div>
+    <div class="timeline"><strong>${esc(t.transactionId||t.id||"-")}</strong><span>${localDateTime(t.createdAt)}<br>${esc(t.date||"-")} • ${esc(t.pic||"-")}</span></div>
     <div class="row-main"><strong>${esc(t.productId)}</strong><button class="help-btn" onclick="showRawHelp('${jsq(t.productId)}')">?</button><div class="name">${esc(p?.name||t.productName||"-")}</div><div class="meta">${isOut?esc(t.type||"OUT"):"Stock In"} • UOM synced: ${esc(p?.uom||t.uom||"-")}</div></div>
     <div class="row-cell"><div class="label">Quantity</div><div class="val">${qty(t.qty)} ${esc(p?.uom||t.uom||"")}</div></div>
     <div class="row-cell"><div class="label">Unit Price</div><div class="val">${money(t.unitPrice)}</div></div>
@@ -5473,6 +5526,7 @@ function importStockInFile(event){
     }
 
     const headers=rows[0].map(value=>String(value??"").trim());
+    const transactionIdCol=findCsvColumn(headers,["Transaction ID","TransactionId","Stock In ID","IN ID","Unique ID"]);
     const dateCol=findCsvColumn(headers,["Date","Stock In Date","In Date"]);
     const timeCol=findCsvColumn(headers,["Time","Created Time","Entry Time"]);
     const productCol=findCsvColumn(headers,["Product ID","ProductId","Products ID","SKU","Raw ID","Material ID","Product","Product Name","Products Name"]);
@@ -5490,6 +5544,8 @@ function importStockInFile(event){
     const dateOrder=detectImportDateOrder(rows.slice(1),dateCol);
     const validRows=[];
     const invalidRows=[];
+    const providedTransactionIds=new Set();
+    const generatedTransactionIds=mode==="REPLACE_ALL"?new Set():transactionIdSet("IN");
     let fileDataRows=0;
 
     rows.slice(1).forEach((r,idx)=>{
@@ -5538,9 +5594,17 @@ function importStockInFile(event){
         ?String(r[picCol]).trim()
         :"Imported";
       const createdAt=`${date}T${clock}`;
+      const requestedTransactionId=transactionIdCol>=0?normalizeTransactionId(r[transactionIdCol]):"";
+      if(requestedTransactionId&&providedTransactionIds.has(requestedTransactionId)){
+        invalidRows.push(`Row ${rowNumber}: duplicate Transaction ID inside file - ${requestedTransactionId}`);
+        return;
+      }
+      if(requestedTransactionId)providedTransactionIds.add(requestedTransactionId);
+      const transactionId=requestedTransactionId||nextTransactionId("IN",date,generatedTransactionIds);
+      generatedTransactionIds.add(transactionId);
 
       validRows.push({
-        id:uid("IN"),date,createdAt,entryOpenedAt:createdAt,
+        id:uid("IN"),transactionId,date,createdAt,entryOpenedAt:createdAt,
         pic,productId:raw.id,productName:raw.name,qty:q,uom:raw.uom||"",
         unitPrice:Number(unitPrice),totalCost:q*Number(unitPrice),reference,
         receiptImage:"",qtyImage:"",importSource:sourceLabel,
@@ -5580,10 +5644,15 @@ function importStockInFile(event){
     }
 
     const existingFingerprints=new Set((db.stockIn||[]).map(rtStockInFingerprint));
+    const existingTransactionIds=transactionIdSet("IN");
     const uploadFingerprints=new Set();
     let imported=0,alreadyInSystem=0,duplicateInsideFile=0;
 
     validRows.forEach(candidate=>{
+      if(existingTransactionIds.has(normalizeTransactionId(candidate.transactionId))){
+        alreadyInSystem++;
+        return;
+      }
       const fingerprint=rtStockInFingerprint(candidate);
       if(uploadFingerprints.has(fingerprint)){
         duplicateInsideFile++;
@@ -5596,6 +5665,7 @@ function importStockInFile(event){
       }
       db.stockIn.push(candidate);
       existingFingerprints.add(fingerprint);
+      existingTransactionIds.add(normalizeTransactionId(candidate.transactionId));
       imported++;
     });
 
@@ -5691,11 +5761,11 @@ function importStockOutCsv(event){
   reader.readAsText(file);
 }
 function downloadStockInTemplate(format="xlsx"){
-  const headers=["Date","Time","Product ID","Qty","Unit Price","PIC","Reference"];
+  const headers=["Transaction ID","Date","Time","Product ID","Qty","Unit Price","PIC","Reference"];
   const sample=db.rawMaterials[0];
   const rows=[
     headers,
-    [today(),"09:00:00",sample?sample.id:"RAW-EXAMPLE",1,sample?sample.costPerUnit:0,"Imported","Opening / past stock in"]
+    ["",today(),"09:00:00",sample?sample.id:"RAW-EXAMPLE",1,sample?sample.costPerUnit:0,"Imported","Opening / past stock in"]
   ];
 
   if(String(format).toLowerCase()==="csv"){
@@ -5710,7 +5780,7 @@ function downloadStockInTemplate(format="xlsx"){
   }
   const worksheet=XLSX.utils.aoa_to_sheet(rows);
   worksheet["!cols"]=[
-    {wch:14},{wch:12},{wch:22},{wch:12},{wch:14},{wch:18},{wch:34}
+    {wch:22},{wch:14},{wch:12},{wch:22},{wch:12},{wch:14},{wch:18},{wch:34}
   ];
   const workbook=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook,worksheet,"IN_STOCK Import");
@@ -5725,7 +5795,7 @@ function downloadStockOutTemplate(){
 }
 function renderStockIn(){
   const month=selected("inMonth"),year=selected("inYear"),q=selected("inSearch").toLowerCase();
-  const rows=db.stockIn.filter(t=>(!month||isMonthYear(t.date,month,year))&&(!q||`${t.productId} ${t.productName} ${t.pic} ${t.reference}`.toLowerCase().includes(q))).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  const rows=db.stockIn.filter(t=>(!month||isMonthYear(t.date,month,year))&&(!q||`${t.transactionId||""} ${t.productId} ${t.productName} ${t.pic} ${t.reference}`.toLowerCase().includes(q))).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   setHtml("stockInBody",rows.map(t=>stockLedgerItem(t,"IN")).join("")||`<div class="row-card">No stock in record found.</div>`);
 }
 function openStockInModal(){
@@ -5747,12 +5817,12 @@ async function saveStockInModal(){
   const pic=selected("inPic").trim(); if(!pic)return alert("Person In Charge is required.");
   const receipt=await readImage("inReceipt"), qtyImg=await readImage("inQtyImg");
   const q=Number(selected("inQty")||0), price=Number(selected("inPrice")||0); if(q<=0)return alert("Quantity must be more than 0.");
-  db.stockIn.push({id:uid("IN"),date:selected("inDate")||today(),createdAt:nowIso(),entryOpenedAt:modalOpenedAt,pic,productId:p.id,productName:p.name,qty:q,uom:p.uom,unitPrice:price,totalCost:q*price,reference:selected("inRef").trim(),receiptImage:receipt,qtyImage:qtyImg});
+  db.stockIn.push({id:uid("IN"),transactionId:nextTransactionId("IN",selected("inDate")||today()),date:selected("inDate")||today(),createdAt:nowIso(),entryOpenedAt:modalOpenedAt,pic,productId:p.id,productName:p.name,qty:q,uom:p.uom,unitPrice:price,totalCost:q*price,reference:selected("inRef").trim(),receiptImage:receipt,qtyImage:qtyImg});
   closeModal(); renderAll();
 }
 function renderStockOut(){
   const month=selected("outMonth"),year=selected("outYear"),q=selected("outSearch").toLowerCase(),type=selected("outTypeFilter");
-  const rows=db.stockOut.filter(t=>(!month||isMonthYear(t.date,month,year))&&(!type||t.type===type)&&(!q||`${t.productId} ${t.productName} ${t.pic} ${t.type} ${t.remark}`.toLowerCase().includes(q))).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  const rows=db.stockOut.filter(t=>(!month||isMonthYear(t.date,month,year))&&(!type||t.type===type)&&(!q||`${t.transactionId||""} ${t.productId} ${t.productName} ${t.pic} ${t.type} ${t.remark}`.toLowerCase().includes(q))).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   setHtml("stockOutBody",rows.map(t=>stockLedgerItem(t,"OUT")).join("")||`<div class="row-card">No stock out record found.</div>`);
 }
 function openStockOutModal(){
@@ -5778,7 +5848,7 @@ async function saveStockOutModal(){
   const type=selected("outType"), q=Number(selected("outQty")||0), price=Number(selected("outPrice")||0); if(q<=0)return alert("Quantity must be more than 0.");
   const proof=await readImage("outProof"); if(proofRequiredType(type)&&!proof)return alert("Proof image is required for Wastage or Rotten / Expired.");
   const sig=imageSignature(proof); if(sig && db.stockOut.some(t=>t.proofSignature===sig))return alert("This exact image was already used before. Please capture a new proof photo.");
-  db.stockOut.push({id:uid("OUT"),date:selected("outDate")||today(),createdAt:nowIso(),entryOpenedAt:modalOpenedAt,proofCapturedAt:proof?nowIso():"",pic,type,productId:p.id,productName:p.name,qty:q,uom:p.uom,unitPrice:price,totalCost:q*price,remark:selected("outRemark").trim(),receiptImage:proof,proofSignature:sig});
+  db.stockOut.push({id:uid("OUT"),transactionId:nextTransactionId("OUT",selected("outDate")||today()),date:selected("outDate")||today(),createdAt:nowIso(),entryOpenedAt:modalOpenedAt,proofCapturedAt:proof?nowIso():"",pic,type,productId:p.id,productName:p.name,qty:q,uom:p.uom,unitPrice:price,totalCost:q*price,remark:selected("outRemark").trim(),receiptImage:proof,proofSignature:sig});
   closeModal(); renderAll();
 }
 function showRawHelp(id){const p=rawById(id); if(!p)return alert("Please select a product first."); alert(`Products ID: ${p.id}\nName: ${p.name}\nOriginal Packaging / Unit Size: ${p.unitSize||"-"}\nUOM: ${p.uom||"-"}\nMeaning: Staff must count stock using this UOM from RAW_LIST, not create their own unit.`);}
@@ -5790,7 +5860,7 @@ function renderWastage(){
   const month=selected("wasteMonth"),year=selected("wasteYear"),q=selected("wasteSearch").toLowerCase(); const s=wastageSummary(month,year); const top=s.bySku[0]?.name||"-";
   setHtml("wasteKpis",[kpiCard("Wastage Cost",money(s.cost),month+" "+year,"red-text"),kpiCard("Wastage Qty",qty(s.qtyAll),"Total quantity"),kpiCard("Records",s.rows.length,"Wastage entries"),kpiCard("Missing Proof",s.missing,"Should be zero",s.missing?"red-text":"green-text")].join(""));
   setHtml("wasteChart",barChart(s.bySku.slice(0,10).map(x=>({label:x.name,value:x.cost})),"money"));
-  const rows=s.rows.filter(t=>!q||`${t.productId} ${t.productName} ${t.pic} ${t.type} ${t.remark}`.toLowerCase().includes(q)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  const rows=s.rows.filter(t=>!q||`${t.transactionId||""} ${t.productId} ${t.productName} ${t.pic} ${t.type} ${t.remark}`.toLowerCase().includes(q)).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
   setHtml("wasteBody",rows.map(t=>stockLedgerItem(t,"OUT")).join("")||`<div class="row-card">No wastage record found.</div>`);
 }
 
@@ -6326,7 +6396,7 @@ function exportBackup(){downloadBlob(new Blob([JSON.stringify(db,null,2)],{type:
 function importBackup(event){const f=event.target.files[0]; if(!f)return; const reader=new FileReader(); reader.onload=e=>{try{db=normalizeDb(JSON.parse(e.target.result));saveDb();renderAll();alert("Backup imported successfully.");}catch(err){alert("Invalid backup file.");}}; reader.readAsText(f);}
 function clearAllData(){if(!confirm("Delete all local data from this browser?"))return; localStorage.removeItem(STORAGE_KEY); db=normalizeDb({rawMaterials:[],stockIn:[],stockOut:[],menu:[],expenses:[],sales:[],recipes:{},ingredientMap:{},salesDifferences:[],projectionQty:{}}); renderAll();}
 function downloadBlob(blob,filename){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);}
-function exportCsv(type){let headers=[],rows=[]; if(type==="raw"){headers=["ID","Name","Category","Unit Size","UOM","Cost","Status","Supplier","Balance","PIC","Created At","Updated At"];rows=db.rawMaterials.map(p=>[p.id,p.name,p.category,p.unitSize,p.uom,p.costPerUnit,p.status,p.supplier,stockStats(p.id).balance,p.pic,p.createdAt,p.updatedAt]);} if(type==="stockIn"){headers=["Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"];rows=db.stockIn.map(t=>[t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"]);} if(type==="stockOut"){headers=["Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"];rows=db.stockOut.map(t=>[t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt]);} if(type==="sales"){headers=["Product","Qty","Discount","Month","Year"];rows=db.sales.map(s=>[s.product,s.qty,s.adjustment,s.month,s.year]);} if(type==="expenses"){headers=["Date","Category","Description","Amount","Payment","Reference"];rows=db.expenses.map(e=>[e.date,e.category,e.description,e.amount,e.paymentMethod,e.reference]);} const csv=[headers,...rows].map(r=>r.map(c=>`"${String(c??"").replaceAll('"','""')}"`).join(",")).join("\n"); downloadBlob(new Blob([csv],{type:"text/csv;charset=utf-8"}),`${type}-${today()}.csv`);}
+function exportCsv(type){let headers=[],rows=[]; if(type==="raw"){headers=["ID","Name","Category","Unit Size","UOM","Cost","Status","Supplier","Balance","PIC","Created At","Updated At"];rows=db.rawMaterials.map(p=>[p.id,p.name,p.category,p.unitSize,p.uom,p.costPerUnit,p.status,p.supplier,stockStats(p.id).balance,p.pic,p.createdAt,p.updatedAt]);} if(type==="stockIn"){headers=["Transaction ID","Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"];rows=db.stockIn.map(t=>[t.transactionId,t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"]);} if(type==="stockOut"){headers=["Transaction ID","Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"];rows=db.stockOut.map(t=>[t.transactionId,t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt]);} if(type==="sales"){headers=["Product","Qty","Discount","Month","Year"];rows=db.sales.map(s=>[s.product,s.qty,s.adjustment,s.month,s.year]);} if(type==="expenses"){headers=["Date","Category","Description","Amount","Payment","Reference"];rows=db.expenses.map(e=>[e.date,e.category,e.description,e.amount,e.paymentMethod,e.reference]);} const csv=[headers,...rows].map(r=>r.map(c=>`"${String(c??"").replaceAll('"','""')}"`).join(",")).join("\n"); downloadBlob(new Blob([csv],{type:"text/csv;charset=utf-8"}),`${type}-${today()}.csv`);}
 
 /* =========================================================
    V6.0 LOGIN / STAFF VIEW / BOSS SETTINGS / DAILY STOCK COUNT
@@ -6806,7 +6876,7 @@ async function saveStaffStockIn(){
   const receipt=receiptObj.data;
   const qtyImg=qtyObj.data;
   db.stockIn.push({
-    id:uid("IN"), date, createdAt:nowIso(), entryOpenedAt:nowIso(),
+    id:uid("IN"), transactionId:nextTransactionId("IN",date), date, createdAt:nowIso(), entryOpenedAt:nowIso(),
     pic:currentUserName(), productId:p.id, productName:p.name,
     qty:q, uom:p.uom||"", unitPrice:price, totalCost:q*price,
     reference:selected("staffInReference").trim()||"Staff stock in",
@@ -6831,7 +6901,7 @@ async function saveStaffStockOut(){
   const price=Number(selected("staffOutPrice")||0);
   const date=selected("staffOutDate")||today();
   db.stockOut.push({
-    id:uid("OUT"), date, createdAt:nowIso(), entryOpenedAt:nowIso(),
+    id:uid("OUT"), transactionId:nextTransactionId("OUT",date), date, createdAt:nowIso(), entryOpenedAt:nowIso(),
     proofCapturedAt:proof?nowIso():"",
     pic:currentUserName(), type, productId:p.id, productName:p.name,
     qty:q, uom:p.uom||"", unitPrice:price, totalCost:q*price,
@@ -7662,11 +7732,11 @@ function rtFingerprint(parts){
 }
 
 function rtStockInFingerprint(t){
-  return rtFingerprint([t.date,t.productId,Number(t.qty||0).toFixed(6),Number(t.unitPrice||0).toFixed(6),t.reference]);
+  return rtFingerprint([t.date,t.createdAt,t.productId,Number(t.qty||0).toFixed(6),Number(t.unitPrice||0).toFixed(6),t.pic,t.reference]);
 }
 
 function rtStockOutFingerprint(t){
-  return rtFingerprint([t.date,t.productId,Number(t.qty||0).toFixed(6),t.type,t.remark]);
+  return rtFingerprint([t.date,t.createdAt,t.productId,Number(t.qty||0).toFixed(6),Number(t.unitPrice||0).toFixed(6),t.type,t.pic,t.remark]);
 }
 
 function rtExpenseFingerprint(e){
@@ -7687,8 +7757,8 @@ function rtDownloadCsv(headers,rows,filename){
 function exportCsv(type){
   var headers=[],rows=[];
   if(type==="raw"){headers=["ID","Name","Category","Unit Size","UOM","Cost","Status","Supplier","Balance","PIC","Created At","Updated At"];rows=db.rawMaterials.map(function(p){return[p.id,p.name,p.category,p.unitSize,p.uom,p.costPerUnit,p.status,p.supplier,stockStats(p.id).balance,p.pic,p.createdAt,p.updatedAt];});}
-  if(type==="stockIn"){headers=["Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"];rows=db.stockIn.map(function(t){return[t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"];});}
-  if(type==="stockOut"){headers=["Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"];rows=db.stockOut.map(function(t){return[t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt];});}
+  if(type==="stockIn"){headers=["Transaction ID","Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"];rows=db.stockIn.map(function(t){return[t.transactionId,t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"];});}
+  if(type==="stockOut"){headers=["Transaction ID","Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"];rows=db.stockOut.map(function(t){return[t.transactionId,t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt];});}
   if(type==="sales"){headers=["Product","Qty","Discount / Adjustment","Month","Year"];rows=db.sales.map(function(s){return[s.product,s.qty,s.adjustment,s.month,s.year];});}
   if(type==="expenses"){headers=["Date","Category","Description","Amount","Payment","Reference"];rows=db.expenses.map(function(e){return[e.date,e.category,e.description,e.amount,e.paymentMethod,e.reference];});}
   if(!headers.length)return alert("Unknown export type.");
@@ -9228,7 +9298,7 @@ function applyRawBulkImport(){
       if(Number(row.openingBalance||0)>0){
         var stockDate=row.openingDate||today();
         db.stockIn.push({
-          id:uid("IN"),date:stockDate,createdAt:createdAt,entryOpenedAt:createdAt,
+          id:uid("IN"),transactionId:nextTransactionId("IN",stockDate),date:stockDate,createdAt:createdAt,entryOpenedAt:createdAt,
           pic:row.pic||currentSession.name,productId:row.id,productName:row.name,
           qty:Number(row.openingBalance),uom:row.uom,unitPrice:Number(row.cost||0),
           totalCost:Number(row.openingBalance)*Number(row.cost||0),
@@ -9592,13 +9662,13 @@ function rtExportDataset(type){
     base:"raw-list-"+today(),sheet:"RAW_LIST"
   };
   if(type==="stockIn")return {
-    headers:["Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"],
-    rows:(db.stockIn||[]).map(function(t){return[t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"];}),
+    headers:["Transaction ID","Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"],
+    rows:(db.stockIn||[]).map(function(t){return[t.transactionId,t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"];}),
     base:"stock-in-"+today(),sheet:"IN_STOCK"
   };
   if(type==="stockOut")return {
-    headers:["Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"],
-    rows:(db.stockOut||[]).map(function(t){return[t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt];}),
+    headers:["Transaction ID","Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"],
+    rows:(db.stockOut||[]).map(function(t){return[t.transactionId,t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt];}),
     base:"stock-out-"+today(),sheet:"OUT_STOCK"
   };
   if(type==="sales")return {
@@ -9645,9 +9715,9 @@ function downloadRawImportTemplate(format){
   rtDownloadTemplate(headers,rows,"RAW_LIST-import-template-"+today(),format,"RAW_LIST Import");
 }
 function downloadStockOutTemplate(format){
-  var headers=["Date","Time","Product ID","Qty","Out Type","Unit Cost","PIC","Remark"];
+  var headers=["Transaction ID","Date","Time","Product ID","Qty","Out Type","Unit Cost","PIC","Remark"];
   var sample=(db.rawMaterials||[])[0];
-  var rows=[[today(),"18:00:00",sample?sample.id:"RAW-EXAMPLE",1,"Production Use",sample?sample.costPerUnit:0,"Imported","Past stock out / usage"]];
+  var rows=[["",today(),"18:00:00",sample?sample.id:"RAW-EXAMPLE",1,"Production Use",sample?sample.costPerUnit:0,"Imported","Past stock out / usage"]];
   rtDownloadTemplate(headers,rows,"out-stock-import-template-"+today(),format,"OUT_STOCK Import");
 }
 function downloadSalesTemplate(format){
@@ -9673,6 +9743,7 @@ function importStockOutFile(event){
   readRawBulkFile(file).then(function(rows){
     if(!Array.isArray(rows)||rows.length<2)return alert(source+" has no data rows.");
     var headers=rows[0];
+    var transactionIdCol=findCsvColumn(headers,["Transaction ID","TransactionId","Stock Out ID","OUT ID","Unique ID"]);
     var dateCol=findCsvColumn(headers,["Date","Stock Out Date","Out Date"]);
     var timeCol=findCsvColumn(headers,["Time","Created Time","Entry Time"]);
     var productCol=findCsvColumn(headers,["Product ID","ProductId","Products ID","SKU","Raw ID","Material ID","Product","Product Name"]);
@@ -9684,6 +9755,9 @@ function importStockOutFile(event){
     if(productCol<0||qtyCol<0)return alert("Import failed. The file must include Product ID and Qty columns.");
     var dateOrder=detectImportDateOrder(rows.slice(1),dateCol);
     var imported=0,skipped=0,skippedRows=[];
+    var existingTransactionIds=transactionIdSet("OUT");
+    var fileTransactionIds=new Set();
+    var generatedTransactionIds=new Set(existingTransactionIds);
     rows.slice(1).forEach(function(r,idx){
       if(!Array.isArray(r)||!r.some(function(v){return String(v==null?"":v).trim()!=="";}))return;
       var rowNo=idx+2;
@@ -9699,12 +9773,19 @@ function importStockOutFile(event){
       if(!Number.isFinite(Number(unitCost))||Number(unitCost)<0){skipped++;skippedRows.push("Row "+rowNo+": unit cost is invalid");return;}
       var typeRaw=typeCol>=0?String(r[typeCol]||"").trim():"Production Use";
       var remark=remarkCol>=0&&String(r[remarkCol]||"").trim()?String(r[remarkCol]).trim():"Imported from "+source;
-      var candidate={date:date,productId:raw.id,qty:q,type:typeRaw||"Production Use",remark:remark};
+      var createdAt=date+"T"+clock;
+      var requestedTransactionId=transactionIdCol>=0?normalizeTransactionId(r[transactionIdCol]):"";
+      if(requestedTransactionId&&fileTransactionIds.has(requestedTransactionId)){skipped++;skippedRows.push("Row "+rowNo+": duplicate Transaction ID inside file - "+requestedTransactionId);return;}
+      if(requestedTransactionId)fileTransactionIds.add(requestedTransactionId);
+      if(requestedTransactionId&&existingTransactionIds.has(requestedTransactionId)){skipped++;skippedRows.push("Row "+rowNo+": Transaction ID already in system - "+requestedTransactionId);return;}
+      var transactionId=requestedTransactionId||nextTransactionId("OUT",date,generatedTransactionIds);
+      generatedTransactionIds.add(transactionId);
+      var candidate={transactionId:transactionId,date:date,createdAt:createdAt,productId:raw.id,qty:q,unitPrice:Number(unitCost),type:typeRaw||"Production Use",pic:picCol>=0?String(r[picCol]||"").trim():"Imported",remark:remark};
       if((db.stockOut||[]).some(function(t){return rtStockOutFingerprint(t)===rtStockOutFingerprint(candidate);})){skipped++;skippedRows.push("Row "+rowNo+": exact duplicate stock-out");return;}
       var available=stockStats(raw.id).balance;
       if(q>available+0.000001){skipped++;skippedRows.push("Row "+rowNo+": insufficient stock; available "+qty(available)+" "+(raw.uom||""));return;}
-      var createdAt=date+"T"+clock;
-      db.stockOut.push({id:uid("OUT"),date:date,createdAt:createdAt,entryOpenedAt:createdAt,proofCapturedAt:"",pic:picCol>=0&&String(r[picCol]||"").trim()?String(r[picCol]).trim():"Imported",type:typeRaw||"Production Use",productId:raw.id,productName:raw.name,qty:q,uom:raw.uom||"",unitPrice:Number(unitCost),totalCost:q*Number(unitCost),remark:remark,receiptImage:"",proofSignature:"",importSource:source,importFileName:file.name||"",importRowNumber:rowNo});
+      db.stockOut.push({id:uid("OUT"),transactionId:transactionId,date:date,createdAt:createdAt,entryOpenedAt:createdAt,proofCapturedAt:"",pic:picCol>=0&&String(r[picCol]||"").trim()?String(r[picCol]).trim():"Imported",type:typeRaw||"Production Use",productId:raw.id,productName:raw.name,qty:q,uom:raw.uom||"",unitPrice:Number(unitCost),totalCost:q*Number(unitCost),remark:remark,receiptImage:"",proofSignature:"",importSource:source,importFileName:file.name||"",importRowNumber:rowNo});
+      existingTransactionIds.add(transactionId);
       imported++;
     });
     if(imported){saveDb();renderAll();logActivity("IMPORT","OUT_STOCK",source+" import: "+imported+" imported, "+skipped+" skipped");}
@@ -9851,6 +9932,10 @@ async function clearAllData(){
   alert("All business data was cleared from this browser. User accounts and settings were kept.");return true;
 }
 
+/* V10.8 migration: assign stable IDs to all previously saved Stock In/Out rows before rendering. */
+db=normalizeDb(db);
+try{saveDb();}catch(error){console.warn("Transaction ID migration could not be saved",error);}
+
 window.exportData=exportData;
 window.exportActivityLog=exportActivityLog;
 window.exportStockCount=exportStockCount;
@@ -9865,6 +9950,6 @@ syncLoginOverlay();
 initCloudSync();
 setTimeout(()=>showStockCountReminder(false),1200);
 </script>
-<!-- V10.3 STOCK IN CSV + EXCEL IMPORT — 2026-07-30 -->
+<!-- V10.8 UNIQUE STOCK TRANSACTION IDs — 2026-07-31 -->
 </body>
 </html>

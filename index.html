@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ALPACCO PROFESSIONAL UI + BOSS-MANAGED CATEGORY/PAYMENT DROPDOWNS — 2026-07-29 -->
+<!-- ALPACCO PROFESSIONAL UI + SMART HISTORICAL STOCK-IN IMPORT — 2026-07-30 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -3873,10 +3873,12 @@ tr:hover td{
           <input id="rawSearch" placeholder="Search raw material..." oninput="renderRaw()">
           <select id="rawStatusFilter" onchange="renderRaw()"><option value="">All Status</option><option>ACTIVE</option><option>DEACTIVE</option><option>LOW STOCK</option></select>
           <button class="btn-gold" onclick="openRawModal()">+ Add Raw Material</button>
-          <button class="btn-light" onclick="downloadRawImportTemplate()">Download Import Template</button>
-          <button class="btn-green" onclick="document.getElementById('rawBulkFile').click()">Bulk Upload RAW_LIST</button>
-          <input id="rawBulkFile" class="hidden" type="file" accept=".csv,.xlsx,.xls" onchange="beginRawBulkImport(event)">
-          <button class="btn-blue" onclick="exportCsv('raw')">Export CSV</button>
+          <select id="rawTemplateFormat" title="Choose template format"><option value="xlsx">Template: Excel</option><option value="csv">Template: CSV</option></select>
+          <button class="btn-light" onclick="downloadRawImportTemplate(selected('rawTemplateFormat'))">Download Template</button>
+          <button class="btn-green" onclick="document.getElementById('rawBulkFile').click()">Import RAW_LIST (CSV / Excel)</button>
+          <input id="rawBulkFile" class="hidden" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="beginRawBulkImport(event)">
+          <select id="rawExportFormat" title="Choose export format"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportData('raw',selected('rawExportFormat'))">Export</button>
         </div>
       </div>
       <div class="raw-bulk-guide">
@@ -3952,15 +3954,20 @@ tr:hover td{
           <input id="inYear" type="number" value="2026" onchange="renderStockIn()">
           <input id="inSearch" placeholder="Search ledger..." oninput="renderStockIn()">
           <button class="btn-green" onclick="openStockInModal()">+ Add Stock In</button>
+          <select id="stockInImportMode" title="Choose how the uploaded Stock In file should be applied">
+            <option value="ADD">Add new records only</option>
+            <option value="REPLACE_ALL">Initial setup: replace all Stock In (Boss only)</option>
+          </select>
           <button class="btn-purple" onclick="document.getElementById('stockInImportFile').click()">Import Stock In (CSV / Excel)</button>
-          <button class="btn-light" onclick="downloadStockInTemplate('xlsx')">Download Excel Template</button>
-          <button class="btn-light" onclick="downloadStockInTemplate('csv')">Download CSV Template</button>
+          <select id="stockInTemplateFormat" title="Choose template format"><option value="xlsx">Template: Excel</option><option value="csv">Template: CSV</option></select>
+          <button class="btn-light" onclick="downloadStockInTemplate(selected('stockInTemplateFormat'))">Download Template</button>
           <input id="stockInImportFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="importStockInFile(event)">
-          <button class="btn-blue" onclick="exportCsv('stockIn')">Export CSV</button>
+          <select id="stockInExportFormat" title="Choose export format"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportData('stockIn',selected('stockInExportFormat'))">Export</button>
         </div>
       </div>
       <div class="note-box">
-        <strong>Accepted upload files:</strong> CSV or Excel (<b>.xlsx / .xls</b>). Required columns: <b>Date, Product ID, Qty</b>. Optional: Unit Price, PIC, Reference, Time. The first worksheet will be imported for Excel files.
+        <strong>Historical Stock In is allowed:</strong> CSV or Excel (<b>.xlsx / .xls</b>). Required columns: <b>Date, Product ID, Qty</b>. Optional: Unit Price, PIC, Reference, Time. Supported dates include <b>2025-07-30, 30/07/2025, 7/30/25</b> and normal Excel date cells. <b>Add new records only</b> keeps existing records and reports matches as “Already in system”. <b>Initial setup: replace all Stock In</b> is Boss-only and rebuilds the Stock In ledger from the uploaded file after making a safety backup.
       </div>
       <div id="stockInBody" class="ledger-list"></div>
     </div>
@@ -4040,15 +4047,17 @@ tr:hover td{
           <select id="outTypeFilter" onchange="renderStockOut()"><option value="">All Out Types</option><option>Production Use</option><option>Wastage</option><option>Rotten / Expired</option><option>Damage</option><option>Sample / Testing</option><option>Adjustment</option></select>
           <input id="outSearch" placeholder="Search ledger..." oninput="renderStockOut()">
           <button class="btn-red" onclick="openStockOutModal()">+ Add Stock Out</button>
-          <button class="btn-purple" onclick="document.getElementById('stockOutCsvFile').click()">Import OUT_STOCK CSV</button>
-          <button class="btn-light" onclick="downloadStockOutTemplate()">Download OUT Template</button>
-          <input id="stockOutCsvFile" type="file" accept=".csv,text/csv" style="display:none" onchange="importStockOutCsv(event)">
-          <button class="btn-blue" onclick="exportCsv('stockOut')">Export CSV</button>
+          <button class="btn-purple" onclick="document.getElementById('stockOutCsvFile').click()">Import OUT_STOCK (CSV / Excel)</button>
+          <select id="stockOutTemplateFormat" title="Choose template format"><option value="xlsx">Template: Excel</option><option value="csv">Template: CSV</option></select>
+          <button class="btn-light" onclick="downloadStockOutTemplate(selected('stockOutTemplateFormat'))">Download Template</button>
+          <input id="stockOutCsvFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="importStockOutFile(event)">
+          <select id="stockOutExportFormat" title="Choose export format"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportData('stockOut',selected('stockOutExportFormat'))">Export</button>
         </div>
       </div>
       <div class="warn-box">For new wastage/expired records, upload proof photo when required.</div>
       <div class="note-box">
-        <strong>CSV format:</strong> <b>Date, Product ID, Qty, Out Type</b>. Optional: Unit Cost, PIC, Remark, Time.
+        <strong>CSV / Excel format:</strong> <b>Date, Product ID, Qty, Out Type</b>. Optional: Unit Cost, PIC, Remark, Time. Historical dates are accepted.
       </div>
       <div id="stockOutBody" class="ledger-list"></div>
     </div>
@@ -4086,7 +4095,8 @@ tr:hover td{
         </div>
         <div class="actions">
           <input id="stockCountSearch" placeholder="Search count history..." oninput="renderStockCount()">
-          <button class="btn-blue" onclick="exportStockCountCsv()">Export Count CSV</button>
+          <select id="stockCountExportFormat" title="Choose export format"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportStockCount(selected('stockCountExportFormat'))">Export Count</button>
         </div>
       </div>
       <div id="stockCountHistory" class="ledger-list"></div>
@@ -4124,15 +4134,17 @@ tr:hover td{
             <option value="DEACTIVE">Deactive Products</option>
             <option value="">All Products</option>
           </select>
-          <button class="btn-green" onclick="document.getElementById('salesCsvFile').click()">Import Sales CSV</button>
-          <button class="btn-light" onclick="downloadSalesTemplate()">Download CSV Template</button>
-          <input id="salesCsvFile" type="file" accept=".csv,text/csv" style="display:none" onchange="importSalesCsv(event)">
-          <button class="btn-blue" onclick="exportCsv('sales')">Export Sales CSV</button>
+          <button class="btn-green" onclick="document.getElementById('salesCsvFile').click()">Import Sales (CSV / Excel)</button>
+          <select id="salesTemplateFormat" title="Choose template format"><option value="xlsx">Template: Excel</option><option value="csv">Template: CSV</option></select>
+          <button class="btn-light" onclick="downloadSalesTemplate(selected('salesTemplateFormat'))">Download Template</button>
+          <input id="salesCsvFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="importSalesFile(event)">
+          <select id="salesExportFormat" title="Choose export format"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportData('sales',selected('salesExportFormat'))">Export Sales</button>
         </div>
       </div>
       <div class="grid four" id="salesKpis"></div>
       <div class="note-box" style="margin-top:14px">
-        <strong>CSV format:</strong> <b>Product, Qty</b>. Optional: Discount, Month, Year.
+        <strong>CSV / Excel format:</strong> <b>Product, Qty</b>. Optional: Discount, Month, Year.
       </div>
     </div>
     <div class="card">
@@ -4162,14 +4174,16 @@ tr:hover td{
           <input id="expenseYear" type="number" value="2026" onchange="renderExpenses()">
           <input id="expenseSearch" placeholder="Search expenses..." oninput="renderExpenses()">
           <button class="btn-gold" onclick="openExpenseModal()">+ Add Expense</button>
-          <button class="btn-purple" onclick="document.getElementById('expensesCsvFile').click()">Import Expenses CSV</button>
-          <button class="btn-light" onclick="downloadExpensesTemplate()">Download Template</button>
-          <input id="expensesCsvFile" type="file" accept=".csv,text/csv" style="display:none" onchange="importExpensesCsv(event)">
-          <button class="btn-blue" onclick="exportCsv('expenses')">Export CSV</button>
+          <button class="btn-purple" onclick="document.getElementById('expensesCsvFile').click()">Import Expenses (CSV / Excel)</button>
+          <select id="expensesTemplateFormat" title="Choose template format"><option value="xlsx">Template: Excel</option><option value="csv">Template: CSV</option></select>
+          <button class="btn-light" onclick="downloadExpensesTemplate(selected('expensesTemplateFormat'))">Download Template</button>
+          <input id="expensesCsvFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="importExpensesFile(event)">
+          <select id="expensesExportFormat" title="Choose export format"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportData('expenses',selected('expensesExportFormat'))">Export</button>
         </div>
       </div>
       <div class="note-box">
-        <strong>Expenses CSV:</strong> <b>Date, Category, Description, Amount</b>. Optional: PIC, Payment Method, Reference.
+        <strong>Expenses CSV / Excel:</strong> <b>Date, Category, Description, Amount</b>. Optional: PIC, Payment Method, Reference. Historical dates are accepted.
       </div>
       <div id="expenseBody" class="expense-list"></div>
     </div>
@@ -4245,7 +4259,8 @@ tr:hover td{
             <option value="IMPORT">Import</option>
             <option value="BACKUP">Backup</option>
           </select>
-          <button class="btn-blue" onclick="exportActivityLogCsv()">Export Log CSV</button>
+          <select id="activityExportFormat" title="Choose export format"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportActivityLog(selected('activityExportFormat'))">Export Log</button>
           <button class="btn-light" onclick="clearOldActivityLogs()">Clear Old Logs</button>
         </div>
       </div>
@@ -4489,9 +4504,9 @@ tr:hover td{
 
       <div class="card">
         <h2>Backup & Restore</h2>
-        <p class="small">Download JSON backup before major changes. This is still useful even after Supabase sync.</p>
+        <p class="small">Operational tables export as Excel or CSV. Full-system backup remains JSON because it must preserve accounts, permissions, recipes, images, settings and sync data that a flat spreadsheet cannot safely restore.</p>
         <div class="actions">
-          <button class="btn-dark" onclick="exportBackup()">Download JSON Backup</button>
+          <button class="btn-dark" onclick="exportBackup()">Download Full-System JSON Backup</button>
           <button class="btn-blue" onclick="document.getElementById('importFile').click()">Import JSON Backup</button>
           <input id="importFile" type="file" accept=".json" style="display:none" onchange="importBackup(event)">
           <button class="btn-light" onclick="window.print()">Print Report</button>
@@ -5295,28 +5310,114 @@ function stockLedgerItem(t,direction){
   </div>`;
 }
 
-function normaliseDateForImport(value){
-  const raw=String(value||"").trim();
-  if(!raw)return today();
-  const valid=(y,m,d)=>{const dt=new Date(Date.UTC(Number(y),Number(m)-1,Number(d)));return Number(y)>=1900&&Number(y)<=2100&&dt.getUTCFullYear()===Number(y)&&dt.getUTCMonth()===Number(m)-1&&dt.getUTCDate()===Number(d);};
-  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const [y,m,d]=raw.split("-");return valid(y,m,d)?raw:null;}
-  let m=raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if(m)return valid(m[3],m[2],m[1])?`${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`:null;
-  m=raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
-  if(m){
-    const y=Number(m[3])>50?`19${m[3]}`:`20${m[3]}`;
-    return valid(y,m[2],m[1])?`${y}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`:null;
+function normaliseDateForImport(value,dateOrder="AUTO"){
+  const valid=(y,m,d)=>{
+    y=Number(y);m=Number(m);d=Number(d);
+    const dt=new Date(Date.UTC(y,m-1,d));
+    return y>=1900&&y<=2100&&dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d;
+  };
+  const iso=(y,m,d)=>valid(y,m,d)?`${String(y).padStart(4,"0")}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`:null;
+  const fullYear=y=>{
+    y=Number(y);
+    if(y<100)return y>=70?1900+y:2000+y;
+    return y;
+  };
+
+  // Excel can return a real Date object when the workbook stores a date cell.
+  if(value instanceof Date&&!isNaN(value.getTime())){
+    return iso(value.getFullYear(),value.getMonth()+1,value.getDate());
   }
-  const d=new Date(raw);
-  if(!isNaN(d)){const iso=d.toISOString().slice(0,10);const [y,mo,day]=iso.split("-");return valid(y,mo,day)?iso:null;}
+
+  // Also accept an Excel serial date, including historical transactions.
+  if(typeof value==="number"&&isFinite(value)&&value>0){
+    const whole=Math.floor(value);
+    const excelDate=new Date(Date.UTC(1899,11,30)+whole*86400000);
+    const parsed=iso(excelDate.getUTCFullYear(),excelDate.getUTCMonth()+1,excelDate.getUTCDate());
+    if(parsed)return parsed;
+  }
+
+  let raw=String(value==null?"":value).trim();
+  if(!raw)return today();
+  raw=raw.replace(/^\uFEFF/,"").replace(/\s+/g," ");
+
+  // ISO dates, with or without a time portion.
+  let m=raw.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(?:[ T].*)?$/);
+  if(m)return iso(m[1],m[2],m[3]);
+
+  // Slash, dash or dot dates. Supports both D/M/Y and M/D/Y.
+  m=raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})(?:[ T].*)?$/);
+  if(m){
+    const first=Number(m[1]),second=Number(m[2]),year=fullYear(m[3]);
+    let order=String(dateOrder||"AUTO").toUpperCase();
+    if(first>12&&second<=12)order="DMY";
+    else if(second>12&&first<=12)order="MDY";
+    else if(order!=="MDY"&&order!=="DMY")order="DMY"; // Malaysia default for genuinely ambiguous dates.
+    return order==="MDY"?iso(year,first,second):iso(year,second,first);
+  }
+
+  // Month-name formats such as 30 Jul 2025 or Jul 30, 2025.
+  const parsedMs=Date.parse(raw);
+  if(!Number.isNaN(parsedMs)){
+    const d=new Date(parsedMs);
+    return iso(d.getUTCFullYear(),d.getUTCMonth()+1,d.getUTCDate());
+  }
   return null;
 }
+function detectImportDateOrder(rows,dateCol){
+  if(dateCol<0)return "DMY";
+  let dmy=0,mdy=0;
+  (rows||[]).forEach(row=>{
+    const value=Array.isArray(row)?row[dateCol]:"";
+    const raw=String(value==null?"":value).trim();
+    const m=raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](?:\d{2}|\d{4})(?:[ T].*)?$/);
+    if(!m)return;
+    const first=Number(m[1]),second=Number(m[2]);
+    if(first>12&&second<=12)dmy++;
+    if(second>12&&first<=12)mdy++;
+  });
+  if(mdy>dmy)return "MDY";
+  if(dmy>mdy)return "DMY";
+  return "DMY";
+}
 function normaliseTimeForImport(value){
-  const raw=String(value||"").trim();
+  const formatSeconds=total=>{
+    total=((Math.round(Number(total)||0)%86400)+86400)%86400;
+    const h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;
+    return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  };
+
+  if(value instanceof Date&&!isNaN(value.getTime())){
+    return formatSeconds(value.getHours()*3600+value.getMinutes()*60+value.getSeconds());
+  }
+
+  // Excel time cells can arrive as a fraction of one day, for example 0.375 = 09:00.
+  if(typeof value==="number"&&isFinite(value)){
+    const fraction=((value%1)+1)%1;
+    return formatSeconds(fraction*86400);
+  }
+
+  let raw=String(value==null?"":value).trim();
   if(!raw)return "00:00:00";
-  const m=raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+
+  // Numeric text produced by some Excel readers.
+  if(/^\d*\.\d+$/.test(raw)){
+    const numeric=Number(raw);
+    if(isFinite(numeric))return formatSeconds((((numeric%1)+1)%1)*86400);
+  }
+
+  const ampm=raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)$/i);
+  if(ampm){
+    let hour=Number(ampm[1]);
+    const minute=Number(ampm[2]),second=Number(ampm[3]||0);
+    if(hour<1||hour>12||minute>59||second>59)return null;
+    if(String(ampm[4]).toUpperCase()==="AM")hour=hour===12?0:hour;
+    else hour=hour===12?12:hour+12;
+    return formatSeconds(hour*3600+minute*60+second);
+  }
+
+  const m=raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if(!m||Number(m[1])>23||Number(m[2])>59||Number(m[3]||0)>59)return null;
-  return `${String(m[1]).padStart(2,"0")}:${m[2]}:${m[3]||"00"}`;
+  return formatSeconds(Number(m[1])*3600+Number(m[2])*60+Number(m[3]||0));
 }
 function createdAtFromImport(date,time){
   const day=normaliseDateForImport(date),clock=normaliseTimeForImport(time);
@@ -5330,6 +5431,20 @@ function matchRawMaterialForImport(value){
       || db.rawMaterials.find(p=>String(p.id).trim().toLowerCase().includes(target))
       || db.rawMaterials.find(p=>String(p.name).trim().toLowerCase().includes(target));
 }
+function stockInSafetyBackup(label="before-replace"){
+  const payload={
+    backupType:"ALPACCO_STOCK_IN_LEDGER",
+    exportedAt:nowIso(),
+    reason:label,
+    recordCount:Array.isArray(db.stockIn)?db.stockIn.length:0,
+    stockIn:clone(db.stockIn||[])
+  };
+  downloadBlob(
+    new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}),
+    `stock-in-backup-${today()}-${Date.now()}.json`
+  );
+}
+
 function importStockInFile(event){
   const file=event.target.files[0];
   event.target.value="";
@@ -5342,6 +5457,12 @@ function importStockInFile(event){
   }
   if(file.size>10*1024*1024){
     alert("The selected file exceeds the 10 MB safety limit.");
+    return;
+  }
+
+  const mode=String(document.getElementById("stockInImportMode")?.value||"ADD");
+  if(mode==="REPLACE_ALL"&&(!currentSession||currentSession.role!=="boss"||!userCanAccess("stockin"))){
+    alert("Boss login with Stock In permission is required to replace the complete Stock In ledger.");
     return;
   }
 
@@ -5360,85 +5481,139 @@ function importStockInFile(event){
     const picCol=findCsvColumn(headers,["PIC","Person In Charge","Staff","Staff Name"]);
     const refCol=findCsvColumn(headers,["Reference","Supplier","Receipt","Invoice","Remark","Note"]);
 
-    if(productCol<0 || qtyCol<0){
+    if(productCol<0||qtyCol<0){
       alert("Import failed. The file must include Product ID and Qty columns.");
       return;
     }
 
-    let imported=0, skipped=0;
-    const skippedRows=[];
     const sourceLabel=extension==="csv"?"CSV":"Excel";
+    const dateOrder=detectImportDateOrder(rows.slice(1),dateCol);
+    const validRows=[];
+    const invalidRows=[];
+    let fileDataRows=0;
 
     rows.slice(1).forEach((r,idx)=>{
       if(!Array.isArray(r))r=[];
       const rowHasData=r.some(value=>String(value??"").trim()!=="");
       if(!rowHasData)return;
+      fileDataRows++;
 
+      const rowNumber=idx+2;
       const raw=matchRawMaterialForImport(r[productCol]);
       if(!raw){
-        skipped++;
-        skippedRows.push(`Row ${idx+2}: raw material not found - ${r[productCol]||""}`);
+        invalidRows.push(`Row ${rowNumber}: raw material not found - ${r[productCol]||""}`);
         return;
       }
 
       const q=parseNumberFromCsv(r[qtyCol]);
       if(q<=0){
-        skipped++;
-        skippedRows.push(`Row ${idx+2}: quantity is empty, zero or invalid`);
+        invalidRows.push(`Row ${rowNumber}: quantity is empty, zero or invalid`);
         return;
       }
 
-      const date=dateCol>=0?normaliseDateForImport(r[dateCol]):today();
+      const date=dateCol>=0?normaliseDateForImport(r[dateCol],dateOrder):today();
       if(!date){
-        skipped++;
-        skippedRows.push(`Row ${idx+2}: invalid date - ${r[dateCol]||""}`);
+        invalidRows.push(`Row ${rowNumber}: invalid date - ${r[dateCol]||""}`);
         return;
       }
 
-      const unitPrice=unitPriceCol>=0 && String(r[unitPriceCol]??"").trim()!==""
-        ? parseNumberFromCsv(r[unitPriceCol])
-        : rawCostAt(raw,date);
-      const reference=refCol>=0 && String(r[refCol]??"").trim()!==""
-        ? String(r[refCol]).trim()
-        : `Imported from ${sourceLabel}`;
-      const candidate={date,productId:raw.id,qty:q,unitPrice,reference};
-
-      if(db.stockIn.some(t=>rtStockInFingerprint(t)===rtStockInFingerprint(candidate))){
-        skipped++;
-        skippedRows.push(`Row ${idx+2}: exact duplicate stock-in`);
+      const clock=normaliseTimeForImport(timeCol>=0?r[timeCol]:"");
+      if(!clock){
+        invalidRows.push(`Row ${rowNumber}: invalid time - ${timeCol>=0?r[timeCol]||"":""}`);
         return;
       }
 
-      const createdAt=createdAtFromImport(date,timeCol>=0?r[timeCol]:"00:00:00");
-      if(!createdAt){
-        skipped++;
-        skippedRows.push(`Row ${idx+2}: invalid time - ${timeCol>=0?r[timeCol]||"":""}`);
+      const unitPrice=unitPriceCol>=0&&String(r[unitPriceCol]??"").trim()!==""
+        ?parseNumberFromCsv(r[unitPriceCol])
+        :rawCostAt(raw,date);
+      if(!Number.isFinite(Number(unitPrice))||Number(unitPrice)<0){
+        invalidRows.push(`Row ${rowNumber}: unit price is invalid`);
         return;
       }
 
-      db.stockIn.push({
+      const reference=refCol>=0&&String(r[refCol]??"").trim()!==""
+        ?String(r[refCol]).trim()
+        :`Imported from ${sourceLabel}`;
+      const pic=picCol>=0&&String(r[picCol]??"").trim()!==""
+        ?String(r[picCol]).trim()
+        :"Imported";
+      const createdAt=`${date}T${clock}`;
+
+      validRows.push({
         id:uid("IN"),date,createdAt,entryOpenedAt:createdAt,
-        pic:picCol>=0 && String(r[picCol]??"").trim()!=="" ? String(r[picCol]).trim() : "Imported",
-        productId:raw.id,productName:raw.name,qty:q,uom:raw.uom||"",
-        unitPrice,totalCost:q*unitPrice,reference,
+        pic,productId:raw.id,productName:raw.name,qty:q,uom:raw.uom||"",
+        unitPrice:Number(unitPrice),totalCost:q*Number(unitPrice),reference,
         receiptImage:"",qtyImage:"",importSource:sourceLabel,
-        importFileName:file.name||""
+        importFileName:file.name||"",importRowNumber:rowNumber
       });
+    });
+
+    if(mode==="REPLACE_ALL"){
+      if(invalidRows.length){
+        let msg=`Stock In replacement was NOT performed.\n\nFile rows: ${fileDataRows}\nValid rows: ${validRows.length}\nInvalid rows: ${invalidRows.length}`;
+        msg+=`\n\nFix these rows first:\n`+invalidRows.slice(0,15).join("\n");
+        if(invalidRows.length>15)msg+=`\n...and ${invalidRows.length-15} more.`;
+        alert(msg);
+        return;
+      }
+      if(!validRows.length){
+        alert("Stock In replacement was not performed because the file has no valid records.");
+        return;
+      }
+      const oldCount=(db.stockIn||[]).length;
+      if(!confirm(`INITIAL SETUP REPLACEMENT\n\nThis will replace all ${oldCount} existing Stock In records with ${validRows.length} rows from ${file.name}.\n\nA Stock In safety backup will download first. Continue?`))return;
+      const phrase=prompt('Type REPLACE STOCK IN to confirm:');
+      if(phrase!=="REPLACE STOCK IN"){
+        alert("Replacement cancelled. The confirmation phrase did not match.");
+        return;
+      }
+
+      stockInSafetyBackup("before-complete-stock-in-replacement");
+      db.stockIn=validRows;
+      saveDb();
+      renderAll();
+      logActivity("STOCK_IN_REPLACE","IN_STOCK",`${sourceLabel} initial setup replacement: ${oldCount} old records replaced by ${validRows.length} uploaded records`,{
+        fileName:file.name||"",oldCount,newCount:validRows.length
+      });
+      alert(`Stock In ledger replaced successfully.\n\nPrevious records: ${oldCount}\nImported from file: ${validRows.length}\nInvalid: 0\n\nHistorical dates were kept exactly as uploaded.`);
+      return;
+    }
+
+    const existingFingerprints=new Set((db.stockIn||[]).map(rtStockInFingerprint));
+    const uploadFingerprints=new Set();
+    let imported=0,alreadyInSystem=0,duplicateInsideFile=0;
+
+    validRows.forEach(candidate=>{
+      const fingerprint=rtStockInFingerprint(candidate);
+      if(uploadFingerprints.has(fingerprint)){
+        duplicateInsideFile++;
+        return;
+      }
+      uploadFingerprints.add(fingerprint);
+      if(existingFingerprints.has(fingerprint)){
+        alreadyInSystem++;
+        return;
+      }
+      db.stockIn.push(candidate);
+      existingFingerprints.add(fingerprint);
       imported++;
     });
 
     if(imported>0){
       saveDb();
       renderAll();
-      logActivity("STOCK_IN","IN_STOCK",`${sourceLabel} bulk import: ${imported} added, ${skipped} skipped`,{
-        fileName:file.name||"",imported,skipped
+      logActivity("STOCK_IN","IN_STOCK",`${sourceLabel} bulk import: ${imported} new, ${alreadyInSystem} already stored, ${invalidRows.length} invalid`,{
+        fileName:file.name||"",imported,alreadyInSystem,invalid:invalidRows.length
       });
     }
 
-    let msg=`IN_STOCK ${sourceLabel} import completed.\n\nImported: ${imported}\nSkipped: ${skipped}`;
-    if(skippedRows.length){
-      msg += `\n\nSkipped rows:\n`+skippedRows.slice(0,12).join("\n");
-      if(skippedRows.length>12)msg += `\n...and ${skippedRows.length-12} more.`;
+    let msg=`Stock In ${sourceLabel} check completed.\n\nFile rows: ${fileDataRows}\nNewly imported: ${imported}\nAlready in system: ${alreadyInSystem}\nDuplicate rows inside file: ${duplicateInsideFile}\nInvalid rows: ${invalidRows.length}`;
+    if(alreadyInSystem){
+      msg+=`\n\n“Already in system” means those records were previously saved in this browser/team database. They were not rejected and were not added twice.`;
+    }
+    if(invalidRows.length){
+      msg+=`\n\nInvalid rows:\n`+invalidRows.slice(0,12).join("\n");
+      if(invalidRows.length>12)msg+=`\n...and ${invalidRows.length-12} more.`;
     }
     alert(msg);
   }).catch(err=>{
@@ -5447,6 +5622,7 @@ function importStockInFile(event){
   });
 }
 
+// V10.4 historical-date import fix: past dates and both D/M/Y + M/D/Y are accepted.
 // Backward-compatible alias for older saved buttons or browser cache.
 function importStockInCsv(event){
   return importStockInFile(event);
@@ -7627,7 +7803,7 @@ async function clearAllData(){
   var scopeMessage=teamWide
     ? "Because Team Sync is connected, this deletion will sync to every connected team device."
     : "Team Sync is not connected, so this deletion will affect this browser only.";
-  var phrase=prompt(
+  var confirmed=confirm(
     "DANGER — PERMANENT BUSINESS DATA RESET\n\n"+
     "This deletes:\n"+
     "• RAW_LIST and recipes/products\n"+
@@ -7636,9 +7812,9 @@ async function clearAllData(){
     "• Activity logs and uploaded proof images\n\n"+
     "Boss/Staff accounts, PINs, permissions and system settings are kept.\n\n"+
     scopeMessage+"\n\n"+
-    "Type DELETE ALL BUSINESS DATA to continue."
+    "A full safety backup will download first. Continue?"
   );
-  if(phrase!=="DELETE ALL BUSINESS DATA")return alert("Delete cancelled. Nothing was changed.");
+  if(!confirmed)return alert("Delete cancelled. Nothing was changed.");
 
   exportBackup("pre-delete-all-business-data-backup");
 
@@ -9366,6 +9542,321 @@ window.updateRawAutoCode=updateRawAutoCode;
 window.openDeleteRawModal=openDeleteRawModal;
 window.deleteRawMaterialPermanent=deleteRawMaterialPermanent;
 
+
+
+/* =========================================================
+   V10.7 CSV + EXCEL FOR ALL OPERATIONAL IMPORTS / EXPORTS
+   - RAW_LIST, IN_STOCK, OUT_STOCK, SALES_IN and Expenses import CSV/XLSX/XLS.
+   - Every operational export offers CSV or XLSX.
+   - Full-system backup stays JSON because CSV/XLSX cannot preserve nested settings,
+     users, recipes, images, permissions and sync metadata safely.
+   - Clear All Business Data no longer asks the Boss to retype a long phrase.
+   ========================================================= */
+function rtFileExtension(file){
+  return String(file&&file.name||"").split(".").pop().toLowerCase();
+}
+function rtOperationalFileAllowed(file){
+  var ext=rtFileExtension(file);
+  return ["csv","xlsx","xls"].includes(ext);
+}
+function rtSourceLabel(file){
+  return rtFileExtension(file)==="csv"?"CSV":"Excel";
+}
+function rtSafeSheetName(value){
+  return String(value||"Data").replace(/[\\/?*\[\]:]/g," ").trim().slice(0,31)||"Data";
+}
+function rtDownloadTable(headers,rows,baseName,format,sheetName){
+  format=String(format||"xlsx").toLowerCase();
+  if(format==="csv"){
+    rtDownloadCsv(headers,rows,baseName+".csv");
+    return true;
+  }
+  if(format!=="xlsx")return alert("Choose Excel or CSV."),false;
+  if(!window.XLSX)return alert("Excel support could not load. Please use CSV or reload while connected to the internet."),false;
+  var data=[headers].concat(rows);
+  var worksheet=XLSX.utils.aoa_to_sheet(data);
+  worksheet["!cols"]=headers.map(function(header,index){
+    var longest=String(header||"").length;
+    rows.slice(0,500).forEach(function(row){longest=Math.max(longest,String(row[index]==null?"":row[index]).length);});
+    return {wch:Math.min(Math.max(longest+2,12),42)};
+  });
+  var workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,worksheet,rtSafeSheetName(sheetName));
+  XLSX.writeFile(workbook,baseName+".xlsx",{compression:true});
+  return true;
+}
+function rtExportDataset(type){
+  if(type==="raw")return {
+    headers:["ID","Name","Category","Unit Size","UOM","Cost","Status","Supplier","Balance","PIC","Created At","Updated At"],
+    rows:(db.rawMaterials||[]).map(function(p){return[p.id,p.name,p.category,p.unitSize,p.uom,p.costPerUnit,p.status,p.supplier,stockStats(p.id).balance,p.pic,p.createdAt,p.updatedAt];}),
+    base:"raw-list-"+today(),sheet:"RAW_LIST"
+  };
+  if(type==="stockIn")return {
+    headers:["Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"],
+    rows:(db.stockIn||[]).map(function(t){return[t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"];}),
+    base:"stock-in-"+today(),sheet:"IN_STOCK"
+  };
+  if(type==="stockOut")return {
+    headers:["Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"],
+    rows:(db.stockOut||[]).map(function(t){return[t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt];}),
+    base:"stock-out-"+today(),sheet:"OUT_STOCK"
+  };
+  if(type==="sales")return {
+    headers:["Product","Qty","Discount / Adjustment","Month","Year"],
+    rows:(db.sales||[]).map(function(s){return[s.product,s.qty,s.adjustment,s.month,s.year];}),
+    base:"sales-"+today(),sheet:"SALES_IN"
+  };
+  if(type==="expenses")return {
+    headers:["Date","Category","Description","Amount","PIC","Payment Method","Reference","Created At"],
+    rows:(db.expenses||[]).map(function(e){return[e.date,e.category,e.description,e.amount,e.pic,e.paymentMethod,e.reference,e.createdAt];}),
+    base:"expenses-"+today(),sheet:"Expenses"
+  };
+  return null;
+}
+function exportData(type,format){
+  var dataset=rtExportDataset(type);
+  if(!dataset)return alert("Unknown export type.");
+  if(rtDownloadTable(dataset.headers,dataset.rows,dataset.base,format,dataset.sheet)&&currentSession){
+    logActivity("EXPORT",dataset.sheet,(currentSession.name||"User")+" exported "+dataset.sheet+" as "+String(format||"xlsx").toUpperCase());
+  }
+}
+function exportCsv(type){return exportData(type,"csv");}
+function exportActivityLog(format){
+  var headers=["Created At","Date","User","Role","Action","Module","Details"];
+  var rows=(db.activityLogs||[]).map(function(l){return[l.createdAt,l.date,l.user,l.role,l.action,l.module,l.details];});
+  rtDownloadTable(headers,rows,"activity-log-"+today(),format,"Activity Log");
+}
+function exportActivityLogCsv(){return exportActivityLog("csv");}
+function exportStockCount(format){
+  var headers=["Date","Created At","Staff","Product ID","Product Name","System Qty","Actual Qty","Variance","UOM","Remark"];
+  var rows=[];
+  (db.stockCounts||[]).forEach(function(c){(c.items||[]).forEach(function(x){rows.push([c.date,c.createdAt,c.staff,x.productId,x.productName,x.systemQty,x.actualQty,x.variance,x.uom,x.remark]);});});
+  rtDownloadTable(headers,rows,"stock-count-"+today(),format,"Stock Count");
+}
+function exportStockCountCsv(){return exportStockCount("csv");}
+
+function rtDownloadTemplate(headers,rows,baseName,format,sheetName){
+  return rtDownloadTable(headers,rows,baseName,String(format||"xlsx").toLowerCase(),sheetName);
+}
+function downloadRawImportTemplate(format){
+  if(!rawBulkPermissionOk())return;
+  var headers=["Products ID","Products Name","Category","Original Packaging / Unit Size","UOM","Cost Per Unit (RM)","Low Stock Level","Status","Supplier","Payment Method","Opening Balance","Opening Balance Date","PIC"];
+  var rows=[["","Example Raw Material","DRINK","1 bottle","ML",0,0,"ACTIVE","","",0,today(),currentUserName()||"Boss"]];
+  rtDownloadTemplate(headers,rows,"RAW_LIST-import-template-"+today(),format,"RAW_LIST Import");
+}
+function downloadStockOutTemplate(format){
+  var headers=["Date","Time","Product ID","Qty","Out Type","Unit Cost","PIC","Remark"];
+  var sample=(db.rawMaterials||[])[0];
+  var rows=[[today(),"18:00:00",sample?sample.id:"RAW-EXAMPLE",1,"Production Use",sample?sample.costPerUnit:0,"Imported","Past stock out / usage"]];
+  rtDownloadTemplate(headers,rows,"out-stock-import-template-"+today(),format,"OUT_STOCK Import");
+}
+function downloadSalesTemplate(format){
+  var month=selected("salesMonth"),year=selected("salesYear");
+  var headers=["Product","Qty","Discount","Month","Year"];
+  var rows=(db.menu||[]).map(function(m){return[m.product,0,0,month,year];});
+  if(!rows.length)rows=[["Example Product",0,0,month,year]];
+  rtDownloadTemplate(headers,rows,"sales-import-template-"+month+"-"+year,format,"SALES_IN Import");
+}
+function downloadExpensesTemplate(format){
+  var headers=["Date","Category","Description","Amount","PIC","Payment Method","Reference"];
+  var rows=[[today(),"Rental","Shop rental",1500,"Imported","Bank Transfer","Past expense"],[today(),"Utilities","Electricity bill",280,"Imported","Online Banking","Past expense"]];
+  rtDownloadTemplate(headers,rows,"expenses-import-template-"+today(),format,"Expenses Import");
+}
+
+function importStockOutFile(event){
+  var file=event&&event.target&&event.target.files&&event.target.files[0];
+  if(event&&event.target)event.target.value="";
+  if(!file)return;
+  if(!rtOperationalFileAllowed(file))return alert("Upload a CSV, XLSX or XLS file.");
+  if(file.size>10*1024*1024)return alert("The selected file exceeds the 10 MB safety limit.");
+  var source=rtSourceLabel(file);
+  readRawBulkFile(file).then(function(rows){
+    if(!Array.isArray(rows)||rows.length<2)return alert(source+" has no data rows.");
+    var headers=rows[0];
+    var dateCol=findCsvColumn(headers,["Date","Stock Out Date","Out Date"]);
+    var timeCol=findCsvColumn(headers,["Time","Created Time","Entry Time"]);
+    var productCol=findCsvColumn(headers,["Product ID","ProductId","Products ID","SKU","Raw ID","Material ID","Product","Product Name"]);
+    var qtyCol=findCsvColumn(headers,["Qty","Quantity","Quantity Out","Stock Out Qty","Out Qty"]);
+    var typeCol=findCsvColumn(headers,["Out Type","Type","Reason Type","Stock Out Type"]);
+    var unitCostCol=findCsvColumn(headers,["Unit Cost","Unit Price","Cost","Price"]);
+    var picCol=findCsvColumn(headers,["PIC","Person In Charge","Staff","Staff Name"]);
+    var remarkCol=findCsvColumn(headers,["Remark","Reason","Note","Reference"]);
+    if(productCol<0||qtyCol<0)return alert("Import failed. The file must include Product ID and Qty columns.");
+    var dateOrder=detectImportDateOrder(rows.slice(1),dateCol);
+    var imported=0,skipped=0,skippedRows=[];
+    rows.slice(1).forEach(function(r,idx){
+      if(!Array.isArray(r)||!r.some(function(v){return String(v==null?"":v).trim()!=="";}))return;
+      var rowNo=idx+2;
+      var raw=matchRawMaterialForImport(r[productCol]);
+      if(!raw){skipped++;skippedRows.push("Row "+rowNo+": raw material not found - "+(r[productCol]||""));return;}
+      var q=parseNumberFromCsv(r[qtyCol]);
+      if(q<=0){skipped++;skippedRows.push("Row "+rowNo+": quantity is empty, zero or invalid");return;}
+      var date=dateCol>=0?normaliseDateForImport(r[dateCol],dateOrder):today();
+      if(!date){skipped++;skippedRows.push("Row "+rowNo+": invalid date - "+(r[dateCol]||""));return;}
+      var clock=normaliseTimeForImport(timeCol>=0?r[timeCol]:"");
+      if(!clock){skipped++;skippedRows.push("Row "+rowNo+": invalid time");return;}
+      var unitCost=unitCostCol>=0&&String(r[unitCostCol]==null?"":r[unitCostCol]).trim()!==""?parseNumberFromCsv(r[unitCostCol]):rawCostAt(raw,date);
+      if(!Number.isFinite(Number(unitCost))||Number(unitCost)<0){skipped++;skippedRows.push("Row "+rowNo+": unit cost is invalid");return;}
+      var typeRaw=typeCol>=0?String(r[typeCol]||"").trim():"Production Use";
+      var remark=remarkCol>=0&&String(r[remarkCol]||"").trim()?String(r[remarkCol]).trim():"Imported from "+source;
+      var candidate={date:date,productId:raw.id,qty:q,type:typeRaw||"Production Use",remark:remark};
+      if((db.stockOut||[]).some(function(t){return rtStockOutFingerprint(t)===rtStockOutFingerprint(candidate);})){skipped++;skippedRows.push("Row "+rowNo+": exact duplicate stock-out");return;}
+      var available=stockStats(raw.id).balance;
+      if(q>available+0.000001){skipped++;skippedRows.push("Row "+rowNo+": insufficient stock; available "+qty(available)+" "+(raw.uom||""));return;}
+      var createdAt=date+"T"+clock;
+      db.stockOut.push({id:uid("OUT"),date:date,createdAt:createdAt,entryOpenedAt:createdAt,proofCapturedAt:"",pic:picCol>=0&&String(r[picCol]||"").trim()?String(r[picCol]).trim():"Imported",type:typeRaw||"Production Use",productId:raw.id,productName:raw.name,qty:q,uom:raw.uom||"",unitPrice:Number(unitCost),totalCost:q*Number(unitCost),remark:remark,receiptImage:"",proofSignature:"",importSource:source,importFileName:file.name||"",importRowNumber:rowNo});
+      imported++;
+    });
+    if(imported){saveDb();renderAll();logActivity("IMPORT","OUT_STOCK",source+" import: "+imported+" imported, "+skipped+" skipped");}
+    var msg="OUT_STOCK "+source+" import completed.\n\nImported: "+imported+"\nSkipped: "+skipped;
+    if(skippedRows.length){msg+="\n\nSkipped rows:\n"+skippedRows.slice(0,12).join("\n");if(skippedRows.length>12)msg+="\n...and "+(skippedRows.length-12)+" more.";}
+    alert(msg);
+  }).catch(function(err){console.error(err);alert("OUT_STOCK import failed. "+(err&&err.message?err.message:"Check the file format."));});
+}
+function importStockOutCsv(event){return importStockOutFile(event);}
+
+function importSalesFile(event){
+  var file=event&&event.target&&event.target.files&&event.target.files[0];
+  if(event&&event.target)event.target.value="";
+  if(!file)return;
+  if(!rtOperationalFileAllowed(file))return alert("Upload a CSV, XLSX or XLS file.");
+  if(file.size>10*1024*1024)return alert("The selected file exceeds the 10 MB safety limit.");
+  var source=rtSourceLabel(file);
+  readRawBulkFile(file).then(function(rows){
+    if(!Array.isArray(rows)||rows.length<2)return alert(source+" has no data rows.");
+    var headers=rows[0];
+    var productCol=findCsvColumn(headers,["Product","Product Name","Item","Item Name","Menu","SKU"]);
+    var qtyCol=findCsvColumn(headers,["Qty","Quantity","Sales Unit","Units","Unit Sold","Sold Qty","Sales Qty"]);
+    var discountCol=findCsvColumn(headers,["Discount","Adjustment","Discount Adjustment","Adjust","Promo Discount"]);
+    var monthCol=findCsvColumn(headers,["Month","Sales Month"]);
+    var yearCol=findCsvColumn(headers,["Year","Sales Year"]);
+    if(productCol<0||qtyCol<0)return alert("Import failed. The file must include Product and Qty columns.");
+    var defaultMonth=selected("salesMonth"),defaultYear=Number(selected("salesYear"));
+    var imported=0,skipped=0,created=0,skippedRows=[];
+    rows.slice(1).forEach(function(r,idx){
+      if(!Array.isArray(r)||!r.some(function(v){return String(v==null?"":v).trim()!=="";}))return;
+      var productName=String(r[productCol]||"").trim(),menu=matchMenuProduct(productName);
+      if(!menu){skipped++;skippedRows.push("Row "+(idx+2)+": product not found - "+productName);return;}
+      var q=parseNumberFromCsv(r[qtyCol]);
+      if(!Number.isFinite(q)||q<0){skipped++;skippedRows.push("Row "+(idx+2)+": quantity must be zero or more");return;}
+      var discount=discountCol>=0?parseNumberFromCsv(r[discountCol]):0;
+      var monthRaw=monthCol>=0?String(r[monthCol]||"").trim().toUpperCase():defaultMonth;
+      var month=MONTHS.includes(monthRaw)?monthRaw:defaultMonth;
+      var year=yearCol>=0?Number(r[yearCol]||defaultYear):defaultYear;
+      if(!Number.isInteger(year)||year<2000||year>2200){skipped++;skippedRows.push("Row "+(idx+2)+": invalid year");return;}
+      var existed=!!getSalesRec(menu.product,month,year,false),rec=getSalesRec(menu.product,month,year,true);
+      rec.qty=q;rec.adjustment=discount;imported++;if(!existed)created++;
+    });
+    if(imported){saveDb();renderAll();logActivity("IMPORT","SALES_IN",source+" import: "+imported+" imported/updated, "+skipped+" skipped");}
+    var msg="Sales "+source+" import completed.\n\nImported/updated: "+imported+"\nNew records created: "+created+"\nSkipped: "+skipped;
+    if(skippedRows.length){msg+="\n\nSkipped rows:\n"+skippedRows.slice(0,12).join("\n");if(skippedRows.length>12)msg+="\n...and "+(skippedRows.length-12)+" more.";}
+    alert(msg);
+  }).catch(function(err){console.error(err);alert("Sales import failed. "+(err&&err.message?err.message:"Check the file format."));});
+}
+function importSalesCsv(event){return importSalesFile(event);}
+
+function importExpensesFile(event){
+  var file=event&&event.target&&event.target.files&&event.target.files[0];
+  if(event&&event.target)event.target.value="";
+  if(!file)return;
+  if(!rtOperationalFileAllowed(file))return alert("Upload a CSV, XLSX or XLS file.");
+  if(file.size>10*1024*1024)return alert("The selected file exceeds the 10 MB safety limit.");
+  var source=rtSourceLabel(file);
+  readRawBulkFile(file).then(function(rows){
+    if(!Array.isArray(rows)||rows.length<2)return alert(source+" has no data rows.");
+    var headers=rows[0];
+    var dateCol=findCsvColumn(headers,["Date","Expense Date","Transaction Date"]);
+    var categoryCol=findCsvColumn(headers,["Category","Expense Category","Type"]);
+    var descCol=findCsvColumn(headers,["Description","Desc","Item","Expense","Remark","Note"]);
+    var amountCol=findCsvColumn(headers,["Amount","Total","Cost","Expense Amount","RM"]);
+    var picCol=findCsvColumn(headers,["PIC","Person In Charge","Staff","Staff Name"]);
+    var methodCol=findCsvColumn(headers,["Payment Method","Method","Payment","Paid By"]);
+    var refCol=findCsvColumn(headers,["Reference","Ref","Invoice","Receipt"]);
+    if(categoryCol<0||amountCol<0)return alert("Import failed. The file must include Category and Amount columns.");
+    var dateOrder=detectImportDateOrder(rows.slice(1),dateCol);
+    var imported=0,skipped=0,skippedRows=[];
+    rows.slice(1).forEach(function(r,idx){
+      if(!Array.isArray(r)||!r.some(function(v){return String(v==null?"":v).trim()!=="";}))return;
+      var rowNo=idx+2,category=String(r[categoryCol]||"").trim(),amount=parseNumberFromCsv(r[amountCol]);
+      if(!category){skipped++;skippedRows.push("Row "+rowNo+": category is empty");return;}
+      if(amount<=0){skipped++;skippedRows.push("Row "+rowNo+": amount is empty, zero or invalid");return;}
+      var date=dateCol>=0?normaliseDateForImport(r[dateCol],dateOrder):today();
+      if(!date){skipped++;skippedRows.push("Row "+rowNo+": invalid date - "+(r[dateCol]||""));return;}
+      var description=descCol>=0?String(r[descCol]||"").trim():"";
+      var reference=refCol>=0&&String(r[refCol]||"").trim()?String(r[refCol]).trim():"Imported from "+source;
+      var candidate={date:date,category:category,description:description,amount:amount,reference:reference};
+      if((db.expenses||[]).some(function(e){return rtExpenseFingerprint(e)===rtExpenseFingerprint(candidate);})){skipped++;skippedRows.push("Row "+rowNo+": exact duplicate expense");return;}
+      db.expenses.push({id:uid("EXP"),date:date,category:category,description:description,amount:amount,pic:picCol>=0&&String(r[picCol]||"").trim()?String(r[picCol]).trim():"Imported",paymentMethod:methodCol>=0?String(r[methodCol]||"").trim():"",reference:reference,createdAt:date+"T00:00:00",importSource:source,importFileName:file.name||"",importRowNumber:rowNo});
+      imported++;
+    });
+    if(imported){saveDb();renderAll();logActivity("IMPORT","Expenses",source+" import: "+imported+" imported, "+skipped+" skipped");}
+    var msg="Expenses "+source+" import completed.\n\nImported: "+imported+"\nSkipped: "+skipped;
+    if(skippedRows.length){msg+="\n\nSkipped rows:\n"+skippedRows.slice(0,12).join("\n");if(skippedRows.length>12)msg+="\n...and "+(skippedRows.length-12)+" more.";}
+    alert(msg);
+  }).catch(function(err){console.error(err);alert("Expenses import failed. "+(err&&err.message?err.message:"Check the file format."));});
+}
+function importExpensesCsv(event){return importExpensesFile(event);}
+
+async function clearAllData(){
+  if(!currentSession||currentSession.role!=="boss"||!userCanAccess("backup"))return alert("Boss Backup permission required.");
+  if(!rtDangerDeletePasswordConfigured()){
+    alert("Deletion is locked. First go to Settings → Danger Zone Protection and set a separate deletion password.");
+    return false;
+  }
+  var guardKey="alpacco_danger_delete_guard_v1",guard={};
+  try{guard=JSON.parse(sessionStorage.getItem(guardKey)||"{}");}catch(error){guard={};}
+  if(Number(guard.lockedUntil||0)>Date.now()){
+    var minutes=Math.ceil((Number(guard.lockedUntil)-Date.now())/60000);
+    alert("Danger Zone is temporarily locked after repeated wrong passwords. Try again in "+minutes+" minute(s).");
+    return false;
+  }
+  var deletionPassword=prompt("Enter the separate Boss-only Danger Zone deletion password.");
+  if(deletionPassword===null)return false;
+  var passwordOk=false;
+  try{passwordOk=await rtVerifyDangerDeletePassword(deletionPassword);}catch(error){alert(error.message||String(error));return false;}
+  deletionPassword="";
+  if(!passwordOk){
+    var now=Date.now();
+    if(!guard.windowStart||now-Number(guard.windowStart)>15*60*1000)guard={fails:0,windowStart:now};
+    guard.fails=Number(guard.fails||0)+1;
+    if(guard.fails>=5)guard.lockedUntil=now+15*60*1000;
+    try{sessionStorage.setItem(guardKey,JSON.stringify(guard));}catch(error){}
+    alert(guard.lockedUntil?"Wrong deletion password. Danger Zone is locked for 15 minutes.":"Wrong deletion password. Nothing was deleted.");
+    return false;
+  }
+  try{sessionStorage.removeItem(guardKey);}catch(error){}
+
+  var teamWide=teamSyncConfigured();
+  var scopeMessage=teamWide?"This reset will sync to every connected team device.":"This reset affects this browser only because Team Sync is not connected.";
+  var confirmed=confirm(
+    "PERMANENT BUSINESS DATA RESET\n\n"+
+    "Delete RAW_LIST, recipes, all stock movements, stock counts, wastage, sales, expenses, projections, activity logs and uploaded proof images?\n\n"+
+    "User accounts, PINs, permissions and system settings will be kept.\n\n"+
+    scopeMessage+"\n\nA full safety backup will download first."
+  );
+  if(!confirmed)return alert("Delete cancelled. Nothing was changed."),false;
+
+  exportBackup("pre-delete-all-business-data-backup");
+  var settings=clone(db.settings||{});settings.stockCountItemIds=[];settings.stockCountMode="SELECTED";
+  db=normalizeDb({meta:{schemaVersion:"10.7",operationalDataClearedAt:new Date().toISOString(),operationalDataClearedBy:currentSession.name||currentSession.username||"Boss"},rawMaterials:[],stockIn:[],stockOut:[],stockCounts:[],menu:[],recipes:{},ingredientMap:{},sales:[],salesUploads:[],salesDifferences:[],expenses:[],projectionQty:{},activityLogs:[],settings:settings});
+  RT_LAST_SAVED_SNAPSHOT="";
+  var localSaved=saveDb();renderAll();
+  if(!localSaved){alert("The reset could not be saved in this browser. The downloaded safety backup was kept.");return false;}
+  if(teamWide){
+    if(CLOUD_SAVE_TIMER){clearTimeout(CLOUD_SAVE_TIMER);CLOUD_SAVE_TIMER=null;}
+    var synced=await cloudPushData(false);
+    if(!synced){alert("Business data was cleared in this browser, but Team Sync failed. Keep the safety backup and upload this browser data to Supabase before another device makes changes.");return false;}
+    alert("All business data was cleared and synced. User accounts and settings were kept.");return true;
+  }
+  alert("All business data was cleared from this browser. User accounts and settings were kept.");return true;
+}
+
+window.exportData=exportData;
+window.exportActivityLog=exportActivityLog;
+window.exportStockCount=exportStockCount;
+window.importStockOutFile=importStockOutFile;
+window.importSalesFile=importSalesFile;
+window.importExpensesFile=importExpensesFile;
 
 initControls();
 renderAll();

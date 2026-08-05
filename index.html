@@ -3609,6 +3609,40 @@ tr:hover td{
 @media(max-width:700px){.raw-delete-impact{grid-template-columns:1fr}}
 
 </style>
+
+<style>
+/* =========================================================
+   V10.9 BULK ORDERS
+   Recipe-linked quotation/order pricing with editable prices.
+   ========================================================= */
+.side-nav .bulk-order-tab::before{content:"🧾"!important}
+.role-staff .side-nav .bulk-order-tab:not(.hidden){display:flex!important}
+.side-nav .tab[onclick*="'activitylog'"]::before{content:"🕒"!important}
+.side-nav .tab[onclick*="'settings'"]::before{content:"⚙️"!important}
+.side-nav .tab[onclick*="'backup'"]::before{content:"💾"!important}
+.bulk-order-grid{display:grid;grid-template-columns:repeat(5,minmax(145px,1fr));gap:10px;margin-bottom:14px}
+.bulk-order-card{background:#fffdfb;border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:0 8px 20px rgba(91,15,26,.06)}
+.bulk-order-head{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(4,minmax(120px,1fr)) 190px;gap:10px;align-items:center}
+.bulk-order-lines{margin-top:10px;border-top:1px solid var(--line);padding-top:9px}
+.bulk-order-line-preview{display:grid;grid-template-columns:minmax(220px,1.5fr) 90px 120px 120px 120px 100px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed #ead6cf;font-size:12px}
+.bulk-order-line-preview:last-child{border-bottom:none}
+.bulk-order-editor-row{display:grid;grid-template-columns:minmax(210px,1.55fr) 90px 120px 120px 120px 120px 110px 82px;gap:8px;align-items:end;background:#fff8f2;border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:9px}
+.bulk-order-editor-row .field{margin-bottom:0}
+.bulk-order-summary{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:9px;margin:12px 0}
+.bulk-order-summary .mini-box{min-height:68px}
+.bulk-order-price-note{background:#fff4df;border-left:4px solid var(--gold2);border-radius:10px;padding:10px 12px;margin-bottom:12px;color:#6f2730;font-size:12.5px;line-height:1.4}
+.bulk-order-id{font-family:Consolas,"Courier New",monospace;font-weight:800;color:var(--maroon)}
+@media(max-width:1180px){
+  .bulk-order-grid,.bulk-order-summary{grid-template-columns:repeat(2,1fr)}
+  .bulk-order-head{grid-template-columns:1fr 1fr}
+  .bulk-order-editor-row{grid-template-columns:1fr 1fr}
+  .bulk-order-editor-row .bo-remove{grid-column:1/-1}
+  .bulk-order-line-preview{grid-template-columns:1fr 1fr}
+}
+@media(max-width:680px){
+  .bulk-order-grid,.bulk-order-summary,.bulk-order-head,.bulk-order-editor-row,.bulk-order-line-preview{grid-template-columns:1fr}
+}
+</style>
 </head>
 
 <body>
@@ -3696,6 +3730,7 @@ tr:hover td{
     <button class="tab" onclick="showTab('expenses',this)">Expenses</button>
     <button class="tab" onclick="showTab('projection',this)">Projection</button>
     <button class="tab" onclick="showTab('recipes',this)">Recipes</button>
+    <button class="tab bulk-order-tab" onclick="showTab('bulkorders',this)">Bulk Orders</button>
     <button class="tab" onclick="showTab('activitylog',this)">Activity Log</button>
     <button class="tab" onclick="showTab('settings',this)">Settings</button>
     <button class="tab" onclick="showTab('backup',this)">Backup</button>
@@ -4239,6 +4274,38 @@ tr:hover td{
 
 
 
+
+  <section id="bulkorders" class="section">
+    <div class="card">
+      <div class="toolbar">
+        <div>
+          <h2>Bulk Orders</h2>
+          <div class="small">Choose products from Recipes, enter the required quantity, and use any selling price for this order. Editing an order does not change the master Recipe selling price.</div>
+        </div>
+        <div class="actions">
+          <input id="bulkOrderSearch" placeholder="Search order, customer, product..." oninput="renderBulkOrders()">
+          <select id="bulkOrderStatusFilter" onchange="renderBulkOrders()">
+            <option value="">All Status</option>
+            <option value="DRAFT">DRAFT</option>
+            <option value="CONFIRMED">CONFIRMED</option>
+            <option value="COMPLETED">COMPLETED</option>
+            <option value="CANCELLED">CANCELLED</option>
+          </select>
+          <button class="btn-gold" onclick="openBulkOrderModal()">+ New Bulk Order</button>
+          <button class="btn-purple" onclick="document.getElementById('bulkOrderImportFile').click()">Import (CSV / Excel)</button>
+          <input id="bulkOrderImportFile" class="hidden" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onchange="importBulkOrdersFile(event)">
+          <select id="bulkOrderTemplateFormat"><option value="xlsx">Template: Excel</option><option value="csv">Template: CSV</option></select>
+          <button class="btn-light" onclick="downloadBulkOrderTemplate(selected('bulkOrderTemplateFormat'))">Template</button>
+          <select id="bulkOrderExportFormat"><option value="xlsx">Export: Excel</option><option value="csv">Export: CSV</option></select>
+          <button class="btn-blue" onclick="exportBulkOrders(selected('bulkOrderExportFormat'))">Export</button>
+        </div>
+      </div>
+      <div class="bulk-order-price-note"><strong>Order price rule:</strong> The Unit Selling Price is editable every time you create or reopen an order. It is saved only inside that order and will not overwrite the selling price in Recipes.</div>
+      <div id="bulkOrderKpis" class="bulk-order-grid"></div>
+      <div id="bulkOrderBody" class="raw-list"></div>
+    </div>
+  </section>
+
   <section id="activitylog" class="section">
     <div class="card">
       <div class="toolbar">
@@ -4573,11 +4640,26 @@ let modalOpenedAt = "";
 
 function clone(obj){return JSON.parse(JSON.stringify(obj));}
 function normalizeDb(d){
-  d.meta=d.meta||{}; d.meta.schemaVersion="10.8";
+  d.meta=d.meta||{}; d.meta.schemaVersion="10.9";
   d.rawMaterials=d.rawMaterials||[]; d.stockIn=d.stockIn||[]; d.stockOut=d.stockOut||[];
   d.menu=d.menu||[]; d.expenses=d.expenses||[]; d.sales=d.sales||[]; d.recipes=d.recipes||{};
   d.ingredientMap=d.ingredientMap||{}; d.salesUploads=d.salesUploads||[]; d.salesDifferences=d.salesDifferences||[];
   d.projectionQty=d.projectionQty||{};
+  d.bulkOrders=Array.isArray(d.bulkOrders)?d.bulkOrders:[];
+  d.bulkOrders.forEach(function(order){
+    order.id=order.id||uid("BULK");
+    order.date=String(order.date||today()).slice(0,10);
+    order.orderNo=String(order.orderNo||"");
+    order.customer=String(order.customer||"");
+    order.contact=String(order.contact||"");
+    order.reference=String(order.reference||"");
+    order.status=["DRAFT","CONFIRMED","COMPLETED","CANCELLED"].includes(String(order.status||"").toUpperCase())?String(order.status).toUpperCase():"DRAFT";
+    order.notes=String(order.notes||"");
+    order.items=Array.isArray(order.items)?order.items:[];
+    order.items.forEach(function(item){item.id=item.id||uid("BLI");item.product=String(item.product||"");item.qty=Number(item.qty||0);item.unitPrice=Number(item.unitPrice||0);item.unitCost=Number(item.unitCost||0);});
+    order.createdAt=order.createdAt||nowIso();
+    order.updatedAt=order.updatedAt||order.createdAt;
+  });
   d.priceCostHistory=Array.isArray(d.priceCostHistory)?d.priceCostHistory:[];
   d.priceCostHistory=d.priceCostHistory.filter(x=>x&&["SELLING_PRICE","RAW_COST"].includes(x.type)&&x.itemKey&&x.effectiveFrom&&Number.isFinite(Number(x.value))).map(x=>({
     id:x.id||uid("PCH"),type:x.type,itemKey:String(x.itemKey),effectiveFrom:String(x.effectiveFrom).slice(0,10),value:Number(x.value),note:String(x.note||""),createdAt:x.createdAt||nowIso(),createdBy:x.createdBy||"System"
@@ -5018,7 +5100,7 @@ function showDashView(id,btn){document.querySelectorAll(".dash-view").forEach(s=
 
 function renderAll(){
   try{saveDb();}catch(e){console.error("Save error:",e);}
-  const jobs=[renderCategoryFilter,renderDashboard,renderRaw,renderStockIn,renderStockOut,renderWastage,renderSales,renderExpenses,renderProjection,renderRecipes,renderStaffForms,renderStockCount,renderSettings,renderActivityLog,renderStaffLiveInventory];
+  const jobs=[renderCategoryFilter,renderDashboard,renderRaw,renderStockIn,renderStockOut,renderWastage,renderSales,renderExpenses,renderProjection,renderRecipes,renderBulkOrders,renderStaffForms,renderStockCount,renderSettings,renderActivityLog,renderStaffLiveInventory];
   jobs.forEach(fn=>{try{fn();}catch(e){console.error("Render error:",fn.name,e);}});
   try{applyRoleView(false);}catch(e){console.error("Role view error:",e);}
 }
@@ -6394,7 +6476,7 @@ async function readImageWithTimestamp(inputId){
 }
 function exportBackup(){downloadBlob(new Blob([JSON.stringify(db,null,2)],{type:"application/json"}),`alpacco-v4-backup-${today()}.json`);}
 function importBackup(event){const f=event.target.files[0]; if(!f)return; const reader=new FileReader(); reader.onload=e=>{try{db=normalizeDb(JSON.parse(e.target.result));saveDb();renderAll();alert("Backup imported successfully.");}catch(err){alert("Invalid backup file.");}}; reader.readAsText(f);}
-function clearAllData(){if(!confirm("Delete all local data from this browser?"))return; localStorage.removeItem(STORAGE_KEY); db=normalizeDb({rawMaterials:[],stockIn:[],stockOut:[],menu:[],expenses:[],sales:[],recipes:{},ingredientMap:{},salesDifferences:[],projectionQty:{}}); renderAll();}
+function clearAllData(){if(!confirm("Delete all local data from this browser?"))return; localStorage.removeItem(STORAGE_KEY); db=normalizeDb({rawMaterials:[],stockIn:[],stockOut:[],menu:[],expenses:[],sales:[],recipes:{},ingredientMap:{},salesDifferences:[],projectionQty:{},bulkOrders:[]}); renderAll();}
 function downloadBlob(blob,filename){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);}
 function exportCsv(type){let headers=[],rows=[]; if(type==="raw"){headers=["ID","Name","Category","Unit Size","UOM","Cost","Status","Supplier","Balance","PIC","Created At","Updated At"];rows=db.rawMaterials.map(p=>[p.id,p.name,p.category,p.unitSize,p.uom,p.costPerUnit,p.status,p.supplier,stockStats(p.id).balance,p.pic,p.createdAt,p.updatedAt]);} if(type==="stockIn"){headers=["Transaction ID","Created At","Date","PIC","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Reference","Receipt","Qty Photo"];rows=db.stockIn.map(t=>[t.transactionId,t.createdAt,t.date,t.pic,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.reference,t.receiptImage?"YES":"NO",t.qtyImage?"YES":"NO"]);} if(type==="stockOut"){headers=["Transaction ID","Created At","Date","PIC","Type","Product ID","Name","Qty","UOM","Unit Price","Total Cost","Remark","Proof","Proof Captured At"];rows=db.stockOut.map(t=>[t.transactionId,t.createdAt,t.date,t.pic,t.type,t.productId,t.productName,t.qty,t.uom,t.unitPrice,t.totalCost,t.remark,t.receiptImage?"YES":"NO",t.proofCapturedAt]);} if(type==="sales"){headers=["Product","Qty","Discount","Month","Year"];rows=db.sales.map(s=>[s.product,s.qty,s.adjustment,s.month,s.year]);} if(type==="expenses"){headers=["Date","Category","Description","Amount","Payment","Reference"];rows=db.expenses.map(e=>[e.date,e.category,e.description,e.amount,e.paymentMethod,e.reference]);} const csv=[headers,...rows].map(r=>r.map(c=>`"${String(c??"").replaceAll('"','""')}"`).join(",")).join("\n"); downloadBlob(new Blob([csv],{type:"text/csv;charset=utf-8"}),`${type}-${today()}.csv`);}
 
@@ -6415,6 +6497,7 @@ const SECTION_DEFS=[
   {id:"expenses",label:"Expenses"},
   {id:"projection",label:"Projection"},
   {id:"recipes",label:"Recipes"},
+  {id:"bulkorders",label:"Bulk Orders"},
   {id:"activitylog",label:"Activity Log"},
   {id:"settings",label:"Settings"},
   {id:"backup",label:"Backup"}
@@ -9919,7 +10002,7 @@ async function clearAllData(){
 
   exportBackup("pre-delete-all-business-data-backup");
   var settings=clone(db.settings||{});settings.stockCountItemIds=[];settings.stockCountMode="SELECTED";
-  db=normalizeDb({meta:{schemaVersion:"10.7",operationalDataClearedAt:new Date().toISOString(),operationalDataClearedBy:currentSession.name||currentSession.username||"Boss"},rawMaterials:[],stockIn:[],stockOut:[],stockCounts:[],menu:[],recipes:{},ingredientMap:{},sales:[],salesUploads:[],salesDifferences:[],expenses:[],projectionQty:{},activityLogs:[],settings:settings});
+  db=normalizeDb({meta:{schemaVersion:"10.7",operationalDataClearedAt:new Date().toISOString(),operationalDataClearedBy:currentSession.name||currentSession.username||"Boss"},rawMaterials:[],stockIn:[],stockOut:[],stockCounts:[],menu:[],recipes:{},ingredientMap:{},sales:[],salesUploads:[],salesDifferences:[],expenses:[],projectionQty:{},bulkOrders:[],activityLogs:[],settings:settings});
   RT_LAST_SAVED_SNAPSHOT="";
   var localSaved=saveDb();renderAll();
   if(!localSaved){alert("The reset could not be saved in this browser. The downloaded safety backup was kept.");return false;}
@@ -9931,6 +10014,271 @@ async function clearAllData(){
   }
   alert("All business data was cleared from this browser. User accounts and settings were kept.");return true;
 }
+
+
+/* =========================================================
+   V10.9 BULK ORDERS
+   Recipe-linked order pricing with per-order editable prices.
+   ========================================================= */
+function bulkRecipeProducts(){
+  return (db.menu||[]).slice().sort(function(a,b){return String(a.product||"").localeCompare(String(b.product||""));});
+}
+function bulkOrderTotals(order){
+  var totals={qty:0,sales:0,cost:0,profit:0,margin:0};
+  (order&&order.items||[]).forEach(function(item){
+    var q=Number(item.qty||0),price=Number(item.unitPrice||0),cost=Number(item.unitCost||0);
+    totals.qty+=q;totals.sales+=q*price;totals.cost+=q*cost;
+  });
+  totals.profit=totals.sales-totals.cost;
+  totals.margin=totals.sales?totals.profit/totals.sales*100:0;
+  return totals;
+}
+function bulkOrderNumber(date,ignoreId){
+  var ymd=String(date||today()).replace(/-/g,"");
+  var prefix="BO-"+ymd+"-",max=0;
+  (db.bulkOrders||[]).forEach(function(order){
+    if(order.id===ignoreId)return;
+    var match=String(order.orderNo||"").match(new RegExp("^"+prefix+"(\\d{4,})$"));
+    if(match)max=Math.max(max,Number(match[1]||0));
+  });
+  return prefix+String(max+1).padStart(4,"0");
+}
+function ensureBulkOrderNumbers(){
+  var used=new Set();
+  (db.bulkOrders||[]).slice().sort(function(a,b){return String(a.createdAt||"").localeCompare(String(b.createdAt||""));}).forEach(function(order){
+    var no=String(order.orderNo||"").trim();
+    if(!no||used.has(no.toUpperCase()))no=bulkOrderNumber(order.date,order.id);
+    order.orderNo=no;used.add(no.toUpperCase());
+  });
+}
+function bulkOrderStatusClass(status){
+  status=String(status||"DRAFT").toUpperCase();
+  if(status==="COMPLETED")return "ok";
+  if(status==="CONFIRMED")return "info";
+  if(status==="CANCELLED")return "low";
+  return "watch";
+}
+function renderBulkOrders(){
+  if(!db||!Array.isArray(db.bulkOrders))return;
+  ensureBulkOrderNumbers();
+  var q=selected("bulkOrderSearch").toLowerCase(),statusFilter=selected("bulkOrderStatusFilter");
+  var all=db.bulkOrders.slice().sort(function(a,b){return String(b.date||"").localeCompare(String(a.date||""))||String(b.createdAt||"").localeCompare(String(a.createdAt||""));});
+  var shown=all.filter(function(order){
+    var productText=(order.items||[]).map(function(item){return item.product;}).join(" ");
+    var matchText=(order.orderNo+" "+order.customer+" "+order.contact+" "+order.reference+" "+productText).toLowerCase();
+    return (!q||matchText.includes(q))&&(!statusFilter||order.status===statusFilter);
+  });
+  var active=all.filter(function(order){return order.status!=="CANCELLED";});
+  var totals=active.reduce(function(sum,order){var t=bulkOrderTotals(order);sum.qty+=t.qty;sum.sales+=t.sales;sum.cost+=t.cost;sum.profit+=t.profit;return sum;},{qty:0,sales:0,cost:0,profit:0});
+  setHtml("bulkOrderKpis",[
+    '<div class="bulk-order-card"><div class="metric-title">Orders</div><div class="metric-value">'+all.length+'</div><div class="metric-note">Including draft and cancelled</div></div>',
+    '<div class="bulk-order-card"><div class="metric-title">Active Units</div><div class="metric-value">'+qty(totals.qty)+'</div><div class="metric-note">Excludes cancelled orders</div></div>',
+    '<div class="bulk-order-card"><div class="metric-title">Order Sales</div><div class="metric-value">'+money(totals.sales)+'</div><div class="metric-note">Custom order prices</div></div>',
+    '<div class="bulk-order-card"><div class="metric-title">Estimated Cost</div><div class="metric-value">'+money(totals.cost)+'</div><div class="metric-note">Recipe cost snapshots</div></div>',
+    '<div class="bulk-order-card"><div class="metric-title">Estimated Profit</div><div class="metric-value '+(totals.profit>=0?'green-text':'red-text')+'">'+money(totals.profit)+'</div><div class="metric-note">Before other expenses</div></div>'
+  ].join(""));
+  var html=shown.map(function(order){
+    var t=bulkOrderTotals(order);
+    var lines=(order.items||[]).map(function(item){
+      var lineSales=Number(item.qty||0)*Number(item.unitPrice||0),lineCost=Number(item.qty||0)*Number(item.unitCost||0),lineProfit=lineSales-lineCost;
+      return '<div class="bulk-order-line-preview"><strong>'+esc(item.product||"-")+'</strong><span>Qty '+qty(item.qty)+'</span><span>Sell '+money(item.unitPrice)+'</span><span>Cost '+money(item.unitCost)+'</span><span>Sales '+money(lineSales)+'</span><span class="'+(lineProfit>=0?'green-text':'red-text')+'">GP '+money(lineProfit)+'</span><span>'+pct(lineSales?lineProfit/lineSales*100:0)+'</span></div>';
+    }).join("");
+    return '<div class="bulk-order-card">'+
+      '<div class="bulk-order-head">'+
+        '<div class="row-main"><div class="bulk-order-id">'+esc(order.orderNo||order.id)+'</div><div class="name">'+esc(order.customer||"No customer entered")+'</div><div class="meta">'+esc(order.date||"-")+(order.contact?' • '+esc(order.contact):'')+(order.reference?' • '+esc(order.reference):'')+'</div></div>'+
+        '<div class="row-cell"><div class="label">Units</div><div class="val">'+qty(t.qty)+'</div></div>'+
+        '<div class="row-cell"><div class="label">Sales</div><div class="val">'+money(t.sales)+'</div></div>'+
+        '<div class="row-cell"><div class="label">Estimated Profit</div><div class="val '+(t.profit>=0?'green-text':'red-text')+'">'+money(t.profit)+'</div></div>'+
+        '<div class="row-cell"><div class="label">Margin</div><div class="val">'+pct(t.margin)+'</div></div>'+
+        '<div class="row-actions"><span class="status '+bulkOrderStatusClass(order.status)+'">'+esc(order.status)+'</span><button class="btn-light" onclick="openBulkOrderModal(\''+jsq(order.id)+'\')">Edit / Re-enter Price</button>'+(currentSession&&currentSession.role==="boss"?'<button class="btn-red" onclick="deleteBulkOrder(\''+jsq(order.id)+'\')">Delete</button>':'')+'</div>'+
+      '</div><div class="bulk-order-lines">'+lines+'</div>'+
+      (order.notes?'<div class="small" style="margin-top:9px"><strong>Notes:</strong> '+esc(order.notes)+'</div>':'')+
+    '</div>';
+  }).join("");
+  setHtml("bulkOrderBody",html||'<div class="bulk-order-card">No bulk orders found.</div>');
+}
+function bulkProductOptions(selectedProduct){
+  var products=bulkRecipeProducts();
+  return '<option value="">Select Recipe Product...</option>'+products.map(function(menu){
+    var status=menu.status||"ACTIVE";
+    return '<option value="'+esc(menu.product)+'" '+(menu.product===selectedProduct?'selected':'')+'>'+esc(menu.product)+' — '+esc(menu.category||"-")+(status!=="ACTIVE"?' ['+esc(status)+']':'')+'</option>';
+  }).join("");
+}
+function openBulkOrderModal(id){
+  var order=id?(db.bulkOrders||[]).find(function(row){return row.id===id;}):null;
+  if(id&&!order)return alert("Bulk order was not found.");
+  if(!bulkRecipeProducts().length)return alert("Create at least one product in Recipes before adding a Bulk Order.");
+  var date=order&&order.date||today();
+  openModal(order?"Edit Bulk Order / Re-enter Price":"New Bulk Order",`
+    <input id="bulkOrderEditId" type="hidden" value="${esc(order&&order.id||"")}">
+    <div class="bulk-order-price-note"><strong>Editable price:</strong> You can type a different Unit Selling Price for every product and reopen this order later to change it again. The Recipe master price is not changed.</div>
+    <div class="form-row">
+      <div class="field"><label>Order ID</label><input id="bulkOrderNo" readonly value="${esc(order&&order.orderNo||bulkOrderNumber(date,""))}"></div>
+      <div class="field"><label>Order Date</label><input id="bulkOrderDate" type="date" value="${esc(date)}" onchange="bulkOrderDateChanged()"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Customer / Company</label><input id="bulkOrderCustomer" value="${esc(order&&order.customer||"")}" placeholder="Customer or company name"></div>
+      <div class="field"><label>Contact</label><input id="bulkOrderContact" value="${esc(order&&order.contact||"")}" placeholder="Phone, email or contact person"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Reference / PO Number</label><input id="bulkOrderReference" value="${esc(order&&order.reference||"")}"></div>
+      <div class="field"><label>Status</label><select id="bulkOrderStatus"><option value="DRAFT" ${!order||order.status==="DRAFT"?'selected':''}>DRAFT</option><option value="CONFIRMED" ${order&&order.status==="CONFIRMED"?'selected':''}>CONFIRMED</option><option value="COMPLETED" ${order&&order.status==="COMPLETED"?'selected':''}>COMPLETED</option><option value="CANCELLED" ${order&&order.status==="CANCELLED"?'selected':''}>CANCELLED</option></select></div>
+    </div>
+    <h3>Order Products</h3>
+    <div id="bulkOrderEditorRows"></div>
+    <button type="button" class="btn-blue" onclick="addBulkOrderLine()">+ Add Recipe Product</button>
+    <div id="bulkOrderLiveSummary" class="bulk-order-summary"></div>
+    <div class="field"><label>Notes</label><textarea id="bulkOrderNotes" placeholder="Delivery, design, payment or production notes">${esc(order&&order.notes||"")}</textarea></div>
+  `,saveBulkOrderModal,function(){
+    var items=order&&order.items&&order.items.length?order.items:[{}];
+    items.forEach(function(item){addBulkOrderLine(item);});
+    bulkOrderRefresh();
+  });
+}
+function addBulkOrderLine(item){
+  item=item||{};
+  var container=document.getElementById("bulkOrderEditorRows");if(!container)return;
+  var row=document.createElement("div");row.className="bulk-order-editor-row";
+  row.innerHTML='<input class="bo-line-id" type="hidden" value="'+esc(item.id||'')+'">'+
+    '<div class="field"><label>Recipe Product</label><select class="bo-product" onchange="bulkOrderProductChanged(this,true)">'+bulkProductOptions(item.product||'')+'</select></div>'+
+    '<div class="field"><label>Qty</label><input class="bo-qty" type="number" min="0" step="0.001" value="'+(Number(item.qty||0)||'')+'" oninput="bulkOrderRefresh()"></div>'+
+    '<div class="field"><label>Unit Selling Price</label><input class="bo-price" type="number" min="0" step="0.01" value="'+(item.unitPrice!=null?Number(item.unitPrice):'')+'" oninput="bulkOrderRefresh()"></div>'+
+    '<div class="field"><label>Recipe Unit Cost</label><input class="bo-cost-view" readonly value="'+money(Number(item.unitCost||0))+'"><input class="bo-cost" type="hidden" value="'+Number(item.unitCost||0)+'"></div>'+
+    '<div class="field"><label>Line Sales</label><input class="bo-sales" readonly value="RM0.00"></div>'+
+    '<div class="field"><label>Line Profit</label><input class="bo-profit" readonly value="RM0.00"></div>'+
+    '<div class="field"><label>Margin</label><input class="bo-margin" readonly value="0.00%"></div>'+
+    '<button type="button" class="btn-red bo-remove" onclick="this.closest(\'.bulk-order-editor-row\').remove();bulkOrderRefresh()">Remove</button>';
+  container.appendChild(row);
+  if(item.product){bulkOrderProductChanged(row.querySelector('.bo-product'),item.unitPrice==null);}else bulkOrderRefresh();
+}
+function bulkOrderProductChanged(selectEl,resetPrice){
+  var row=selectEl&&selectEl.closest('.bulk-order-editor-row');if(!row)return;
+  var product=selectEl.value,date=selected('bulkOrderDate')||today();
+  var cost=product?recipeCost(product,date):0,price=product?sellingPriceAt(product,date):0;
+  row.querySelector('.bo-cost').value=cost;
+  row.querySelector('.bo-cost-view').value=money(cost);
+  var priceEl=row.querySelector('.bo-price');
+  if(resetPrice||priceEl.value==='')priceEl.value=price;
+  bulkOrderRefresh();
+}
+function bulkOrderDateChanged(){
+  document.querySelectorAll('#bulkOrderEditorRows .bulk-order-editor-row').forEach(function(row){
+    bulkOrderProductChanged(row.querySelector('.bo-product'),false);
+  });
+}
+function bulkOrderRefresh(){
+  var totals={qty:0,sales:0,cost:0,profit:0};
+  document.querySelectorAll('#bulkOrderEditorRows .bulk-order-editor-row').forEach(function(row){
+    var q=Number(row.querySelector('.bo-qty').value||0),price=Number(row.querySelector('.bo-price').value||0),cost=Number(row.querySelector('.bo-cost').value||0);
+    var sales=q*price,totalCost=q*cost,profit=sales-totalCost,margin=sales?profit/sales*100:0;
+    row.querySelector('.bo-sales').value=money(sales);row.querySelector('.bo-profit').value=money(profit);row.querySelector('.bo-margin').value=pct(margin);
+    totals.qty+=q;totals.sales+=sales;totals.cost+=totalCost;totals.profit+=profit;
+  });
+  var margin=totals.sales?totals.profit/totals.sales*100:0;
+  setHtml('bulkOrderLiveSummary','<div class="mini-box"><div class="label">Total Units</div><div class="val">'+qty(totals.qty)+'</div></div><div class="mini-box"><div class="label">Order Sales</div><div class="val">'+money(totals.sales)+'</div></div><div class="mini-box"><div class="label">Estimated Cost</div><div class="val">'+money(totals.cost)+'</div></div><div class="mini-box"><div class="label">Estimated Profit</div><div class="val '+(totals.profit>=0?'green-text':'red-text')+'">'+money(totals.profit)+'</div></div><div class="mini-box"><div class="label">Margin</div><div class="val">'+pct(margin)+'</div></div>');
+}
+function saveBulkOrderModal(){
+  var editId=selected('bulkOrderEditId'),old=editId?(db.bulkOrders||[]).find(function(row){return row.id===editId;}):null;
+  var date=selected('bulkOrderDate'),customer=selected('bulkOrderCustomer').trim();
+  if(!date)return alert('Order Date is required.');
+  if(!customer)return alert('Customer / Company is required.');
+  var items=[],seen=new Set(),error='';
+  document.querySelectorAll('#bulkOrderEditorRows .bulk-order-editor-row').forEach(function(row,index){
+    if(error)return;
+    var product=row.querySelector('.bo-product').value,qtyValue=Number(row.querySelector('.bo-qty').value||0),price=Number(row.querySelector('.bo-price').value||0),cost=Number(row.querySelector('.bo-cost').value||0);
+    if(!product){error='Choose a Recipe Product for line '+(index+1)+'.';return;}
+    if(qtyValue<=0){error='Quantity must be more than zero for '+product+'.';return;}
+    if(price<0||!Number.isFinite(price)){error='Selling price is invalid for '+product+'.';return;}
+    if(seen.has(product)){error=product+' appears more than once. Keep one line and combine the quantity.';return;}
+    seen.add(product);items.push({id:row.querySelector('.bo-line-id').value||uid('BLI'),product:product,qty:qtyValue,unitPrice:price,unitCost:cost});
+  });
+  if(error)return alert(error);if(!items.length)return alert('Add at least one Recipe Product.');
+  var order={id:old&&old.id||uid('BULK'),orderNo:old&&old.orderNo||bulkOrderNumber(date,''),date:date,customer:customer,contact:selected('bulkOrderContact').trim(),reference:selected('bulkOrderReference').trim(),status:selected('bulkOrderStatus')||'DRAFT',notes:selected('bulkOrderNotes').trim(),items:items,createdAt:old&&old.createdAt||nowIso(),createdBy:old&&old.createdBy||(currentSession&&currentSession.name)||'System',updatedAt:nowIso(),updatedBy:(currentSession&&currentSession.name)||'System'};
+  if(old)db.bulkOrders=db.bulkOrders.map(function(row){return row.id===old.id?order:row;});else db.bulkOrders.push(order);
+  logActivity('BULK_ORDER','Bulk Orders',(old?'Updated ':'Created ')+order.orderNo+' for '+order.customer+'; '+items.length+' product line(s)');
+  closeModal();renderAll();
+}
+function deleteBulkOrder(id){
+  if(!currentSession||currentSession.role!=="boss")return alert('Only a Boss can delete a Bulk Order.');
+  var order=(db.bulkOrders||[]).find(function(row){return row.id===id;});if(!order)return;
+  if(!confirm('Delete '+order.orderNo+' for '+order.customer+'?\n\nThis removes only the Bulk Order record. Recipe products are not deleted.'))return;
+  db.bulkOrders=db.bulkOrders.filter(function(row){return row.id!==id;});
+  logActivity('BULK_ORDER','Bulk Orders','Deleted '+order.orderNo+' for '+order.customer);renderAll();
+}
+function bulkOrderFlatRows(){
+  var rows=[];
+  (db.bulkOrders||[]).slice().sort(function(a,b){return String(a.date).localeCompare(String(b.date));}).forEach(function(order){
+    var totals=bulkOrderTotals(order);
+    (order.items||[]).forEach(function(item){
+      var lineSales=Number(item.qty||0)*Number(item.unitPrice||0),lineCost=Number(item.qty||0)*Number(item.unitCost||0);
+      rows.push([order.orderNo,order.date,order.customer,order.contact,order.reference,order.status,item.product,item.qty,item.unitPrice,item.unitCost,lineSales,lineCost,lineSales-lineCost,lineSales?(lineSales-lineCost)/lineSales*100:0,totals.sales,totals.cost,totals.profit,totals.margin,order.notes,order.createdAt,order.updatedAt]);
+    });
+  });
+  return rows;
+}
+function exportBulkOrders(format){
+  var headers=['Order ID','Date','Customer / Company','Contact','Reference / PO','Status','Product','Qty','Unit Selling Price','Recipe Unit Cost','Line Sales','Line Cost','Line Profit','Line Margin %','Order Sales','Order Cost','Order Profit','Order Margin %','Notes','Created At','Updated At'];
+  rtDownloadTable(headers,bulkOrderFlatRows(),'bulk-orders-'+today(),format||'xlsx','Bulk Orders');
+}
+function downloadBulkOrderTemplate(format){
+  var headers=['Order ID','Date','Customer / Company','Contact','Reference / PO','Status','Product','Qty','Unit Selling Price','Notes'];
+  var product=bulkRecipeProducts()[0]&&bulkRecipeProducts()[0].product||'Example Recipe Product';
+  var rows=[['BO-20260805-0001','2026-08-05','Example Company','012-3456789','PO-001','DRAFT',product,100,8.50,'Multiple rows with the same Order ID become one order'],['BO-20260805-0001','2026-08-05','Example Company','012-3456789','PO-001','DRAFT',bulkRecipeProducts()[1]&&bulkRecipeProducts()[1].product||product,50,10.00,'Price may be changed after import']];
+  rtDownloadTable(headers,rows,'bulk-order-import-template-'+today(),format||'xlsx','Bulk Order Template');
+}
+function importBulkOrdersFile(event){
+  var file=event&&event.target&&event.target.files&&event.target.files[0];if(event&&event.target)event.target.value='';if(!file)return;
+  if(!rtOperationalFileAllowed(file))return alert('Upload a CSV, XLSX or XLS file.');
+  if(file.size>10*1024*1024)return alert('The selected file exceeds the 10 MB safety limit.');
+  var source=rtSourceLabel(file);
+  readRawBulkFile(file).then(function(rows){
+    if(!Array.isArray(rows)||rows.length<2)return alert(source+' has no data rows.');
+    var headers=rows[0],orderCol=findCsvColumn(headers,['Order ID','Order No','Order Number','Bulk Order ID']),dateCol=findCsvColumn(headers,['Date','Order Date']),customerCol=findCsvColumn(headers,['Customer / Company','Customer','Company']),contactCol=findCsvColumn(headers,['Contact','Phone','Email']),refCol=findCsvColumn(headers,['Reference / PO','Reference','PO Number','PO']),statusCol=findCsvColumn(headers,['Status']),productCol=findCsvColumn(headers,['Product','Recipe Product','Product Name']),qtyCol=findCsvColumn(headers,['Qty','Quantity','Order Qty']),priceCol=findCsvColumn(headers,['Unit Selling Price','Selling Price','Unit Price','Price']),notesCol=findCsvColumn(headers,['Notes','Note','Remark']);
+    if(dateCol<0||customerCol<0||productCol<0||qtyCol<0)return alert('Import requires Date, Customer / Company, Product and Qty columns.');
+    var dateOrder=detectImportDateOrder(rows.slice(1),dateCol),groups={},invalid=[];
+    rows.slice(1).forEach(function(r,index){
+      if(!Array.isArray(r)||!r.some(function(v){return String(v==null?'':v).trim()!=='';}))return;
+      var rowNo=index+2,date=normaliseDateForImport(r[dateCol],dateOrder),customer=String(r[customerCol]||'').trim(),productText=String(r[productCol]||'').trim(),quantity=parseNumberFromCsv(r[qtyCol]),menu=bulkRecipeProducts().find(function(m){return String(m.product||'').toLowerCase()===productText.toLowerCase();});
+      if(!date){invalid.push('Row '+rowNo+': invalid date - '+String(r[dateCol]||''));return;}
+      if(!customer){invalid.push('Row '+rowNo+': customer is empty');return;}
+      if(!menu){invalid.push('Row '+rowNo+': Recipe Product not found - '+productText);return;}
+      if(quantity<=0){invalid.push('Row '+rowNo+': quantity must be more than zero');return;}
+      var suppliedNo=orderCol>=0?String(r[orderCol]||'').trim():'';
+      var key=suppliedNo||('__ROW_'+rowNo);
+      if(!groups[key])groups[key]={orderNo:suppliedNo,date:date,customer:customer,contact:contactCol>=0?String(r[contactCol]||'').trim():'',reference:refCol>=0?String(r[refCol]||'').trim():'',status:statusCol>=0?String(r[statusCol]||'DRAFT').trim().toUpperCase():'DRAFT',notes:notesCol>=0?String(r[notesCol]||'').trim():'',items:[],rows:[]};
+      var group=groups[key];
+      if(group.date!==date||group.customer.toLowerCase()!==customer.toLowerCase()){invalid.push('Row '+rowNo+': Order ID '+key+' has inconsistent date or customer');return;}
+      if(group.items.some(function(item){return item.product===menu.product;})){invalid.push('Row '+rowNo+': '+menu.product+' is repeated inside Order ID '+key);return;}
+      var price=priceCol>=0&&String(r[priceCol]||'').trim()!==''?parseNumberFromCsv(r[priceCol]):sellingPriceAt(menu,date);
+      if(price<0){invalid.push('Row '+rowNo+': invalid selling price');return;}
+      group.items.push({id:uid('BLI'),product:menu.product,qty:quantity,unitPrice:price,unitCost:recipeCost(menu.product,date)});group.rows.push(rowNo);
+    });
+    var imported=0,existing=0;
+    Object.keys(groups).forEach(function(key){
+      var group=groups[key];if(!group.items.length)return;
+      var no=group.orderNo||bulkOrderNumber(group.date,'');
+      if((db.bulkOrders||[]).some(function(order){return String(order.orderNo||'').toUpperCase()===no.toUpperCase();})){existing++;return;}
+      var validStatus=['DRAFT','CONFIRMED','COMPLETED','CANCELLED'].includes(group.status)?group.status:'DRAFT';
+      db.bulkOrders.push({id:uid('BULK'),orderNo:no,date:group.date,customer:group.customer,contact:group.contact,reference:group.reference,status:validStatus,notes:group.notes,items:group.items,createdAt:group.date+'T00:00:00',createdBy:'Import',updatedAt:nowIso(),updatedBy:(currentSession&&currentSession.name)||'Import',importSource:source,importFileName:file.name||''});imported++;
+    });
+    if(imported){saveDb();renderAll();logActivity('IMPORT','Bulk Orders',source+' import: '+imported+' order(s) imported, '+existing+' existing, '+invalid.length+' invalid row(s)');}
+    var msg='Bulk Order '+source+' import completed.\n\nOrders imported: '+imported+'\nExisting Order IDs skipped: '+existing+'\nInvalid rows: '+invalid.length;
+    if(invalid.length){msg+='\n\nInvalid rows:\n'+invalid.slice(0,12).join('\n');if(invalid.length>12)msg+='\n...and '+(invalid.length-12)+' more.';}
+    alert(msg);
+  }).catch(function(error){console.error(error);alert('Bulk Order import failed. '+(error&&error.message?error.message:'Check the file format.'));});
+}
+ensureBulkOrderNumbers();
+window.renderBulkOrders=renderBulkOrders;
+window.openBulkOrderModal=openBulkOrderModal;
+window.addBulkOrderLine=addBulkOrderLine;
+window.bulkOrderProductChanged=bulkOrderProductChanged;
+window.bulkOrderDateChanged=bulkOrderDateChanged;
+window.bulkOrderRefresh=bulkOrderRefresh;
+window.saveBulkOrderModal=saveBulkOrderModal;
+window.deleteBulkOrder=deleteBulkOrder;
+window.exportBulkOrders=exportBulkOrders;
+window.downloadBulkOrderTemplate=downloadBulkOrderTemplate;
+window.importBulkOrdersFile=importBulkOrdersFile;
 
 /* V10.8 migration: assign stable IDs to all previously saved Stock In/Out rows before rendering. */
 db=normalizeDb(db);
@@ -9950,6 +10298,6 @@ syncLoginOverlay();
 initCloudSync();
 setTimeout(()=>showStockCountReminder(false),1200);
 </script>
-<!-- V10.8 UNIQUE STOCK TRANSACTION IDs — 2026-07-31 -->
+<!-- V10.9 BULK ORDERS — 2026-08-05 -->
 </body>
 </html>
